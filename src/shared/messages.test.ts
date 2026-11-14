@@ -58,6 +58,8 @@ describe("isMessageFor", () => {
   });
 
   it("rejects a message addressed to another target", () => {
-    expect(isMessageFor({ target: "background", type: "db" }, "offscreen")).toBe(false);
+    expect(isMessageFor({ target: "background", type: "ensureOffscreen" }, "offscreen")).toBe(
+      false,
+    );
   });
 });

@@ -1,23 +1,36 @@
-// 画面（吹き出し・サイドパネル）から DB を使う入口。DB は offscreen document にあり、service worker が取り次ぐ
+// 画面（吹き出し・サイドパネル）から DB を使う入口。
+// service worker には offscreen document を用意させるだけで、依頼は offscreen document に直接送る
 import {
+  type DbFailure,
   type DbNotification,
   type DbRequest,
   type DbResponse,
   type DbResultOf,
+  type EnsureResponse,
   failure,
   isMessageFor,
   type RuntimeMessage,
 } from "./messages";
 
-export async function askDb<R extends DbRequest>(request: R): Promise<DbResponse<DbResultOf<R>>> {
-  const message: RuntimeMessage = { target: "background", type: "db", request };
+async function send<T>(message: RuntimeMessage, unanswered: string): Promise<T | DbFailure> {
   try {
-    const response: DbResponse<DbResultOf<R>> | undefined =
-      await chrome.runtime.sendMessage(message);
-    return response ?? failure("relay", "the service worker did not answer");
+    const response: T | undefined = await chrome.runtime.sendMessage(message);
+    return response ?? failure("unreachable", unanswered);
   } catch (error) {
-    return failure("relay", error instanceof Error ? error.message : String(error));
+    return failure("unreachable", error instanceof Error ? error.message : String(error));
   }
+}
+
+export async function askDb<R extends DbRequest>(request: R): Promise<DbResponse<DbResultOf<R>>> {
+  const ensured = await send<EnsureResponse>(
+    { target: "background", type: "ensureOffscreen" },
+    "the service worker did not answer",
+  );
+  if (!ensured.ok) return ensured;
+  return send<DbResponse<DbResultOf<R>>>(
+    { target: "offscreen", type: "db", request },
+    "the offscreen document did not answer",
+  );
 }
 
 /** DB の変化の通知を受け取る。戻り値を呼ぶと受け取りをやめる */
