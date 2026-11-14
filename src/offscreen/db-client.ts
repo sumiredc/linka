@@ -37,6 +37,11 @@ export type DbClientOptions = {
 
 type DbOp = Exclude<DbRequest, { kind: "status" }>;
 type Job = { request: DbOp; resolve(response: DbResponse): void };
+type OpenFailure = {
+  reason: string;
+  /** refused は OPFS が使えないと言われたとき。locked と lost（時間切れ・trap）は使えない証拠にならない */
+  cause: "locked" | "refused" | "lost";
+};
 type Outcome =
   | { kind: "response"; response: WorkerResponse }
   | { kind: "timeout" }
@@ -60,6 +65,7 @@ export class DbClient {
   private queue: Job[] = [];
   private pumping = false;
   private needsOpen = true;
+  private opfsOpened = false;
   private storage: StorageState = { kind: "starting" };
 
   constructor(options: DbClientOptions) {
@@ -100,12 +106,23 @@ export class DbClient {
   }
 
   private async run(job: Job): Promise<void> {
-    const outcome = await this.call(toWorkerOp(job.request));
+    let op: WorkerOp;
+    try {
+      op = toWorkerOp(job.request);
+    } catch (error) {
+      job.resolve(failure("exception", messageOf(error)));
+      return;
+    }
+    const outcome = await this.call(op);
     if (outcome.kind === "response" && outcome.response.ok) {
-      const value = outcome.response.value ?? [];
-      const jsons = typeof value === "string" ? [value] : value;
-      job.resolve(typeof value === "string" ? classifyExecute(value) : classifyScript(jsons));
-      if (changedGraph(jsons)) this.options.onNotify?.({ type: "graphChanged" });
+      try {
+        const value = outcome.response.value ?? [];
+        const jsons = typeof value === "string" ? [value] : value;
+        job.resolve(typeof value === "string" ? classifyExecute(value) : classifyScript(jsons));
+        if (changedGraph(jsons)) this.notify({ type: "graphChanged" });
+      } catch (error) {
+        job.resolve(failure("exception", messageOf(error)));
+      }
       return;
     }
     if (outcome.kind === "response" && !outcome.response.ok && !outcome.response.trap) {
@@ -113,49 +130,69 @@ export class DbClient {
       return;
     }
     job.resolve(failure(...describeLoss(outcome)));
-    this.discardWorker();
     this.failQueue("restarting", "the database worker is restarting; try again");
+    this.loseWorker();
+  }
+
+  /** 開いていた DB ごと worker を捨てて、開き直しを予約する */
+  private loseWorker(): void {
+    this.discardWorker();
     this.needsOpen = true;
+    // 止めた依頼の途中までの書き込みが残っている、またはメモリ上の中身が消えたかもしれない
+    this.notify({ type: "graphChanged" });
   }
 
   private async open(): Promise<void> {
-    const opfsFailure = await this.openOpfs();
-    if (opfsFailure === null) {
-      this.setStorage({ kind: "opfs" });
-      return;
+    try {
+      const opfs = await this.openOpfs();
+      if (opfs === null) {
+        this.opfsOpened = true;
+        this.setStorage({ kind: "opfs" });
+        return;
+      }
+      // 一度 OPFS で開けたあとにメモリへ切り替えると、その後の書き込みが再起動で黙って消える。
+      // ロック・時間切れ・trap も OPFS が使えない証拠ではないので、どちらも開けないままにして次の依頼で開き直す
+      if (this.opfsOpened || opfs.cause !== "refused") {
+        this.becomeUnavailable(opfs.reason);
+        return;
+      }
+      const memory = await this.openIn("memory");
+      if (memory === null) {
+        this.setStorage({ kind: "memory", reason: opfs.reason });
+        return;
+      }
+      this.becomeUnavailable(`opfs: ${opfs.reason}; memory: ${memory.reason}`);
+    } catch (error) {
+      this.becomeUnavailable(messageOf(error));
     }
-    const memoryFailure = await this.openIn("memory");
-    if (memoryFailure === null) {
-      this.setStorage({ kind: "memory", reason: opfsFailure });
-      return;
-    }
-    this.discardWorker();
-    this.setStorage({
-      kind: "unavailable",
-      reason: `opfs: ${opfsFailure}; memory: ${memoryFailure}`,
-    });
   }
 
-  /** 開けたら null、開けなければ理由を返す */
-  private async openOpfs(): Promise<string | null> {
+  private becomeUnavailable(reason: string): void {
+    this.discardWorker();
+    this.setStorage({ kind: "unavailable", reason });
+  }
+
+  private async openOpfs(): Promise<OpenFailure | null> {
     // terminate した worker の OPFS のロックはすぐには外れないので、作り直した直後は少し待って開き直す
     const { attempts, delayMs } = this.options.lockRetry ?? { attempts: 1, delayMs: 0 };
     for (let attempt = 1; ; attempt++) {
-      const reason = await this.openIn("opfs");
-      if (reason === null || attempt >= attempts || !/storage locked/i.test(reason)) return reason;
+      const result = await this.openIn("opfs");
+      if (result?.cause !== "locked" || attempt >= attempts) return result;
       await new Promise<void>((resolve) => this.timers.set(resolve, delayMs));
     }
   }
 
-  private async openIn(mode: "opfs" | "memory"): Promise<string | null> {
+  private async openIn(mode: "opfs" | "memory"): Promise<OpenFailure | null> {
     if (!this.worker) this.spawn();
     const outcome = await this.call({ op: "open", mode, uri: this.options.uri });
     if (outcome.kind === "response" && outcome.response.ok) return null;
-    // 開くのに失敗しただけなら worker はそのまま使えるが、時間切れや trap なら作り直す
-    if (outcome.kind !== "response" || (!outcome.response.ok && outcome.response.trap)) {
-      this.discardWorker();
+    const reason = describeLoss(outcome)[1];
+    if (outcome.kind === "response" && !outcome.response.ok && !outcome.response.trap) {
+      // 開くのに失敗しただけなので worker はそのまま使える
+      return { reason, cause: /storage locked/i.test(reason) ? "locked" : "refused" };
     }
-    return describeLoss(outcome)[1];
+    this.discardWorker();
+    return { reason, cause: "lost" };
   }
 
   private spawn(): void {
@@ -172,8 +209,7 @@ export class DbClient {
           return;
         }
         // 依頼の無いときに worker が落ちた。次の依頼に備えて作り直す
-        this.discardWorker();
-        this.needsOpen = true;
+        this.loseWorker();
         void this.pump();
       },
     });
@@ -192,7 +228,14 @@ export class DbClient {
         resolve(outcome);
       };
       this.inflight = { id, settle };
-      worker.post({ ...op, id });
+      try {
+        worker.post({ ...op, id });
+      } catch (error) {
+        settle({
+          kind: "response",
+          response: { id, ok: false, message: messageOf(error), trap: false },
+        });
+      }
     });
   }
 
@@ -206,9 +249,20 @@ export class DbClient {
   }
 
   private setStorage(storage: StorageState): void {
-    if (JSON.stringify(storage) === JSON.stringify(this.storage)) return;
+    // メモリ上の DB は開くたびに空なので、同じ状態でも知らせる
+    if (storage.kind !== "memory" && JSON.stringify(storage) === JSON.stringify(this.storage)) {
+      return;
+    }
     this.storage = storage;
-    this.options.onNotify?.({ type: "storageChanged", storage });
+    this.notify({ type: "storageChanged", storage });
+  }
+
+  private notify(notification: DbNotification): void {
+    try {
+      this.options.onNotify?.(notification);
+    } catch {
+      // 通知を受け取る側の失敗で DB の処理を止めない
+    }
   }
 }
 
@@ -230,4 +284,8 @@ function describeLoss(outcome: Outcome): [DbFailureKind, string] {
         ? ["exception", "unexpected response"]
         : [outcome.response.trap ? "trap" : "exception", outcome.response.message];
   }
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

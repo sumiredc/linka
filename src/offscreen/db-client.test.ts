@@ -51,6 +51,10 @@ function setup(options: Partial<DbClientOptions> = {}) {
   return { client, workers, notifications, current };
 }
 
+function openedModes(workers: FakeWorker[]) {
+  return workers.flatMap((w) => w.posted).flatMap((r) => (r.op === "open" ? [r.mode] : []));
+}
+
 async function flush() {
   for (let i = 0; i < 10; i++) await Promise.resolve();
 }
@@ -278,19 +282,28 @@ describe("DbClient", () => {
       expect(current().posted.map((r) => r.op === "open" && r.mode)).toEqual(["opfs", "opfs"]);
     });
 
-    it("falls back to memory once the lock retries are used up", async () => {
-      const { current } = setup({ lockRetry: { attempts: 2, delayMs: 100 } });
+    it("does not fall back to memory once the lock retries are used up", async () => {
+      const { client, current } = setup({ lockRetry: { attempts: 2, delayMs: 100 } });
       for (let i = 0; i < 2; i++) {
         current().reply({ ok: false, message: "storage locked: opfs://test", trap: false });
         await flush();
         vi.advanceTimersByTime(100);
         await flush();
       }
-      expect(current().posted.map((r) => r.op === "open" && r.mode)).toEqual([
-        "opfs",
-        "opfs",
-        "memory",
-      ]);
+      expect(await client.request({ kind: "status" })).toMatchObject({
+        value: { kind: "unavailable" },
+      });
+    });
+
+    it("does not fall back to memory when the first open times out", async () => {
+      const { client, workers } = setup();
+      await flush();
+      vi.advanceTimersByTime(TIMEOUT_MS);
+      await flush();
+      expect(openedModes(workers)).not.toContain("memory");
+      expect(await client.request({ kind: "status" })).toMatchObject({
+        value: { kind: "unavailable" },
+      });
     });
 
     it("does not retry OPFS for a failure other than the lock", async () => {
@@ -298,6 +311,213 @@ describe("DbClient", () => {
       current().reply({ ok: false, message: "no OPFS here", trap: false });
       await flush();
       expect(current().last).toMatchObject({ op: "open", mode: "memory" });
+    });
+  });
+
+  describe("after OPFS has opened once", () => {
+    async function trappedAfterOpfs() {
+      const ctx = await openedClient();
+      const response = ctx.client.request({ kind: "execute", query: "panic" });
+      await flush();
+      ctx.current().reply({ ok: false, message: "unreachable", trap: true });
+      await response;
+      await flush();
+      return ctx;
+    }
+
+    it("does not fall back to memory when reopening OPFS fails", async () => {
+      const { client, workers, current } = await trappedAfterOpfs();
+      current().reply({ ok: false, message: "no OPFS here", trap: false });
+      await flush();
+      expect(openedModes(workers)).not.toContain("memory");
+      expect(await client.request({ kind: "status" })).toMatchObject({
+        value: { kind: "unavailable" },
+      });
+    });
+
+    it("does not fall back to memory when the reopen times out", async () => {
+      const { client, workers } = await trappedAfterOpfs();
+      vi.advanceTimersByTime(TIMEOUT_MS);
+      await flush();
+      expect(openedModes(workers)).not.toContain("memory");
+      expect(await client.request({ kind: "status" })).toMatchObject({
+        value: { kind: "unavailable" },
+      });
+    });
+  });
+
+  describe("while unavailable", () => {
+    async function unavailable() {
+      const ctx = setup();
+      ctx.current().reply({ ok: false, message: "storage locked", trap: false });
+      await flush();
+      return ctx;
+    }
+
+    it("fails a request as unavailable when OPFS still cannot be opened", async () => {
+      const { client, current } = await unavailable();
+      const response = client.request({ kind: "execute", query: "RETURN 1" });
+      await flush();
+      current().reply({ ok: false, message: "storage locked", trap: false });
+      expect(await response).toMatchObject({ ok: false, error: { kind: "unavailable" } });
+    });
+
+    it("opens OPFS again for the next request and runs it", async () => {
+      const { client, current } = await unavailable();
+      const response = client.request({ kind: "execute", query: "RETURN 1" });
+      await flush();
+      expect(current().last).toMatchObject({ op: "open", mode: "opfs" });
+      current().reply({ ok: true, value: null });
+      await flush();
+      current().reply({ ok: true, value: ok([{ n: 1 }]) });
+      expect(await response).toMatchObject({ ok: true, value: { rows: [{ n: 1 }] } });
+    });
+  });
+
+  describe("when the worker is recreated after the database was open", () => {
+    it("notifies a graph change", async () => {
+      const { client, notifications } = await openedClient();
+      client.request({ kind: "executeScript", script: "CREATE (:A); slow" });
+      await flush();
+      vi.advanceTimersByTime(TIMEOUT_MS);
+      await flush();
+      expect(notifications).toContainEqual({ type: "graphChanged" });
+    });
+
+    it("notifies the in-memory storage again because the new database is empty", async () => {
+      const { client, current, notifications } = setup();
+      current().reply({ ok: false, message: "no OPFS here", trap: false });
+      await flush();
+      current().reply({ ok: true, value: null });
+      await flush();
+      client.request({ kind: "execute", query: "panic" });
+      await flush();
+      current().reply({ ok: false, message: "unreachable", trap: true });
+      await flush();
+      current().reply({ ok: false, message: "no OPFS here", trap: false });
+      await flush();
+      current().reply({ ok: true, value: null });
+      await flush();
+      expect(notifications.filter((n) => n.type === "storageChanged")).toHaveLength(2);
+    });
+  });
+
+  describe("when the worker crashes while idle", () => {
+    it("terminates it and opens the database in a new worker", async () => {
+      const { workers, current } = await openedClient();
+      current().handlers.onError("boom");
+      await flush();
+      expect(workers[0]?.terminated).toBe(true);
+      expect(workers[1]?.posted).toMatchObject([{ op: "open", mode: "opfs" }]);
+    });
+
+    it("runs a later request on the new worker", async () => {
+      const { client, workers, current } = await openedClient();
+      current().handlers.onError("boom");
+      await flush();
+      workers[1]?.reply({ ok: true, value: null });
+      const response = client.request({ kind: "execute", query: "RETURN 1" });
+      await flush();
+      workers[1]?.reply({ ok: true, value: ok([{ n: 1 }]) });
+      expect(await response).toMatchObject({ ok: true });
+    });
+  });
+
+  it("ignores an error reported by a worker that was already replaced", async () => {
+    const { client, workers, current } = await openedClient();
+    const response = client.request({ kind: "execute", query: "panic" });
+    await flush();
+    current().reply({ ok: false, message: "unreachable", trap: true });
+    await response;
+    await flush();
+    workers[0]?.handlers.onError("late");
+    workers[1]?.reply({ ok: true, value: null });
+    await flush();
+    expect(await client.request({ kind: "status" })).toEqual({
+      ok: true,
+      value: { kind: "opfs" },
+    });
+  });
+
+  it("notifies a graph change when a failed script had already written", async () => {
+    const { client, current, notifications } = await openedClient();
+    const response = client.request({ kind: "executeScript", script: "CREATE (:A); BAD" });
+    await flush();
+    current().reply({
+      ok: true,
+      value: [ok([], { nodes_created: 1 }), JSON.stringify({ error: "syntax error" })],
+    });
+    expect(await response).toMatchObject({ ok: false, error: { kind: "relate" } });
+    expect(notifications).toContainEqual({ type: "graphChanged" });
+  });
+
+  describe("unexpected exceptions", () => {
+    it("fails a request whose result is not JSON and runs the next one", async () => {
+      const { client, current } = await openedClient();
+      const broken = client.request({ kind: "execute", query: "RETURN 1" });
+      client.request({ kind: "execute", query: "RETURN 2" });
+      await flush();
+      current().reply({ ok: true, value: "not json" });
+      expect(await broken).toMatchObject({ ok: false, error: { kind: "exception" } });
+      await flush();
+      expect(current().last).toMatchObject({ op: "execute", query: "RETURN 2" });
+    });
+
+    it("fails a request whose parameters cannot be serialized and runs the next one", async () => {
+      const { client, current } = await openedClient();
+      const broken = client.request({ kind: "execute", query: "RETURN $x", params: { x: 1n } });
+      client.request({ kind: "execute", query: "RETURN 2" });
+      expect(await broken).toMatchObject({ ok: false, error: { kind: "exception" } });
+      await flush();
+      expect(current().last).toMatchObject({ op: "execute", query: "RETURN 2" });
+    });
+
+    it("fails a request when posting to the worker throws", async () => {
+      const { client, current } = await openedClient();
+      current().post = () => {
+        throw new Error("DataCloneError");
+      };
+      expect(await client.request({ kind: "execute", query: "RETURN 1" })).toMatchObject({
+        ok: false,
+        error: { kind: "exception", message: "DataCloneError" },
+      });
+    });
+
+    it("settles requests as unavailable when the worker factory throws, then retries", async () => {
+      let fail = true;
+      const workers: FakeWorker[] = [];
+      const client = new DbClient({
+        uri: "opfs://test",
+        timeoutMs: TIMEOUT_MS,
+        createWorker: (handlers) => {
+          if (fail) throw new Error("no Worker");
+          const worker = new FakeWorker(handlers);
+          workers.push(worker);
+          return worker;
+        },
+      });
+      expect(await client.request({ kind: "execute", query: "RETURN 1" })).toMatchObject({
+        ok: false,
+        error: { kind: "unavailable" },
+      });
+      fail = false;
+      client.request({ kind: "execute", query: "RETURN 1" });
+      await flush();
+      expect(workers[0]?.posted).toMatchObject([{ op: "open", mode: "opfs" }]);
+    });
+
+    it("keeps working when the notification listener throws", async () => {
+      const { client, current } = setup({
+        onNotify: () => {
+          throw new Error("listener");
+        },
+      });
+      current().reply({ ok: true, value: null });
+      await flush();
+      const response = client.request({ kind: "execute", query: "CREATE (:A)" });
+      await flush();
+      current().reply({ ok: true, value: ok([], { nodes_created: 1 }) });
+      expect(await response).toMatchObject({ ok: true });
     });
   });
 
