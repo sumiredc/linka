@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { changedGraph, classifyExecute, classifyScript, isMessageFor } from "./messages";
+import {
+  changedGraph,
+  classifyExecute,
+  classifyScript,
+  isFromExtensionPage,
+  isMessageFor,
+} from "./messages";
 
 const envelope = (fields: Record<string, unknown>) =>
   JSON.stringify({ columns: [], rows: [], stats: {}, error: null, ...fields });
@@ -49,6 +55,26 @@ describe("changedGraph", () => {
     expect(
       changedGraph([envelope({ stats: { nodes_created: 1 } }), envelope({ error: "bad" })]),
     ).toBe(true);
+  });
+});
+
+describe("isFromExtensionPage", () => {
+  const root = "chrome-extension://abc/";
+
+  it("accepts a page of this extension, even one opened in a tab", () => {
+    expect(isFromExtensionPage({ url: "chrome-extension://abc/dev.html" }, root)).toBe(true);
+  });
+
+  it("rejects a content script, which reports the URL of the page it runs in", () => {
+    expect(isFromExtensionPage({ url: "https://example.com/" }, root)).toBe(false);
+  });
+
+  it("rejects a page of another extension", () => {
+    expect(isFromExtensionPage({ url: "chrome-extension://abcd/x.html" }, root)).toBe(false);
+  });
+
+  it("rejects a sender without a URL", () => {
+    expect(isFromExtensionPage({}, root)).toBe(false);
   });
 });
 

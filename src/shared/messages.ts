@@ -74,6 +74,14 @@ export function isMessageFor<T extends MessageTarget>(
   );
 }
 
+/**
+ * 拡張機能のページからのメッセージか。content script は閲覧中のページの URL で届くので受け付けない。
+ * 開発用ページはタブで開くため、`sender.tab` の有無では見分けない
+ */
+export function isFromExtensionPage(sender: { url?: string }, extensionRoot: string): boolean {
+  return sender.url?.startsWith(extensionRoot) ?? false;
+}
+
 export function failure(kind: DbFailureKind, message: string): DbFailure {
   return { ok: false, error: { kind, message } };
 }
