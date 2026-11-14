@@ -139,6 +139,18 @@ describe("buildClipStatements on Relate", () => {
     expect(snapshot(embedded)).toEqual(snapshot(parameterized));
   });
 
+  it("stores a lone surrogate as U+FFFD through both parameters and executeScript", () => {
+    const broken = clip(OPFS_URL, "page", { summary: "a\uD800b" });
+    const parameterized = openMemoryDb();
+    const embedded = openMemoryDb();
+    runStatements(parameterized, buildClipStatements(broken));
+    runScript(embedded, toCypherScript(buildClipStatements(broken)));
+    const summaries = [parameterized, embedded].map((db) =>
+      scalar(db, "MATCH (p:Page) RETURN p.summary AS s"),
+    );
+    expect(summaries).toEqual(["a\uFFFDb", "a\uFFFDb"]);
+  });
+
   it("keeps quotes, backslashes and newlines intact through executeScript", () => {
     const db = openMemoryDb();
     runScript(db, toCypherScript(buildClipStatements(wasmClip)));

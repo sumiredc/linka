@@ -1,6 +1,6 @@
 import { claimId, normalizeStatement } from "./claim-id";
 import { normalizeConceptKey } from "./concept-key";
-import type { CypherStatement } from "./cypher";
+import { type CypherStatement, wellFormedValue } from "./cypher";
 import type { Clip } from "./extraction";
 import { normalizePersonName } from "./person-name";
 import { normalizeUrl } from "./url";
@@ -44,7 +44,9 @@ function uniqueBy<T>(items: readonly T[], keyOf: (item: T) => string): T[] {
  * 1 回分のクリップを、パラメータ付きの MERGE 文の並びにする。同じクリップを何度流してもノードと関係は増えない。
  * 再クリップでは、先に {@link buildReclipStatements} で古い内容を消してから流す。
  */
-export function buildClipStatements(clip: Clip): CypherStatement[] {
+export function buildClipStatements(input: Clip): CypherStatement[] {
+  // 抽出結果に壊れたサロゲートがあっても、パラメータと埋め込みの両方で同じ値（U+FFFD）にする
+  const clip = wellFormedValue(input);
   const url = normalizeUrl(clip.url);
   const { extraction } = clip;
   const concepts = new ConceptCollector();
