@@ -1,2 +1,36 @@
-// Relate の dedicated worker と Prompt API の呼び出しは、DB 層と抽出の issue で足す
-export {};
+// DB の唯一の持ち主。service worker から取り次がれた依頼を Relate の worker に渡す
+import { type DbResponse, isMessageFor, type RuntimeMessage } from "../shared/messages";
+import { DbClient } from "./db-client";
+import type { WorkerResponse } from "./worker-protocol";
+
+// execute は止められないので、これを超えたら worker ごと作り直す
+const REQUEST_TIMEOUT_MS = 30_000;
+
+const client = new DbClient({
+  uri: "opfs://linka-graph",
+  timeoutMs: REQUEST_TIMEOUT_MS,
+  // Playwright の Chromium では terminate から約 2 秒でロックが外れた。余裕を見て 10 秒まで待つ
+  lockRetry: { attempts: 40, delayMs: 250 },
+  createWorker: ({ onMessage, onError }) => {
+    const worker = new Worker(new URL("./relate.worker.ts", import.meta.url), { type: "module" });
+    worker.onmessage = (event: MessageEvent<WorkerResponse>) => onMessage(event.data);
+    worker.onerror = (event) => {
+      event.preventDefault();
+      onError(event.message || "the database worker crashed");
+    };
+    return { post: (request) => worker.postMessage(request), terminate: () => worker.terminate() };
+  },
+  onNotify: (notification) => {
+    const message: RuntimeMessage = { target: "background", type: "notify", notification };
+    // service worker が受け取らなかったときは、届ける相手がいないだけなので捨てる
+    chrome.runtime.sendMessage(message).catch(() => {});
+  },
+});
+
+chrome.runtime.onMessage.addListener(
+  (message: unknown, _sender, sendResponse: (response: DbResponse) => void) => {
+    if (!isMessageFor(message, "offscreen")) return false;
+    client.request(message.request).then(sendResponse);
+    return true;
+  },
+);
