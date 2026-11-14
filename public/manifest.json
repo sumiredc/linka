@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Linka",
+  "version": "0.0.0",
+  "description": "Clip what you read in Chrome into a local knowledge graph, then hand that context to your coding agent.",
+  "minimum_chrome_version": "138",
+  "permissions": ["sidePanel", "offscreen", "activeTab", "scripting", "storage"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Linka",
+    "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png" }
+  },
+  "icons": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "128": "icons/icon-128.png" },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+  }
+}
