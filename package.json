@@ -1,0 +1,27 @@
+{
+  "name": "linka",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Clip what you read in Chrome into a local knowledge graph, then hand that context to your coding agent.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "typecheck": "tsc -p .",
+    "test": "vitest run"
+  },
+  "engines": {
+    "node": "26.13.1",
+    "npm": "12.2.2"
+  },
+  "volta": {
+    "node": "26.13.1",
+    "npm": "12.2.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.7",
+    "typescript": "7.0.2",
+    "vitest": "5.1.0"
+  }
+}
