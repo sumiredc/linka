@@ -1,0 +1,69 @@
+{
+  "path": "samples/crdt-notes-sync.html",
+  "title": "Syncing a local-first notes app",
+  "extraction": {
+    "summary": "Replaces last-write-wins sync in a notes app with Yjs documents persisted to IndexedDB and synced over WebSocket, and notes that CRDT history grows.",
+    "concepts": [
+      { "name": "Local-first software", "category": "architecture" },
+      { "name": "CRDT", "category": "sync" },
+      { "name": "Yjs", "category": "library" },
+      { "name": "IndexedDB", "category": "storage" },
+      { "name": "WebSocket", "category": "api" },
+      { "name": "Last-write-wins", "category": "sync" }
+    ],
+    "authors": [],
+    "claims": [
+      {
+        "statement": "Syncing whole documents with last-write-wins silently drops one device's changes when two devices edit the same note offline.",
+        "type": "concern",
+        "concepts": ["Last-write-wins", "Local-first software"]
+      },
+      {
+        "statement": "Persist each Yjs document to IndexedDB on every change and sync updates over WebSocket when online, so the app keeps working while the server is unreachable.",
+        "type": "solution",
+        "concepts": ["Yjs", "IndexedDB", "WebSocket"]
+      },
+      {
+        "statement": "CRDT documents keep enough history to merge, so heavily edited documents grow over time.",
+        "type": "concern",
+        "concepts": ["CRDT"]
+      }
+    ],
+    "relatedConcepts": [
+      { "from": "Last-write-wins", "to": "CRDT" },
+      { "from": "Yjs", "to": "WebSocket" }
+    ]
+  },
+  "addresses": [
+    {
+      "solution": {
+        "page": "https://crdt.tech/",
+        "statement": "CRDTs merge concurrent updates automatically, so every replica converges to the same state without a central server deciding the order."
+      },
+      "concern": {
+        "page": "samples/crdt-notes-sync.html",
+        "statement": "Syncing whole documents with last-write-wins silently drops one device's changes when two devices edit the same note offline."
+      }
+    },
+    {
+      "solution": {
+        "page": "https://docs.yjs.dev/",
+        "statement": "Yjs shared types let several users edit the same document concurrently and merge their changes automatically."
+      },
+      "concern": {
+        "page": "samples/crdt-notes-sync.html",
+        "statement": "Syncing whole documents with last-write-wins silently drops one device's changes when two devices edit the same note offline."
+      }
+    },
+    {
+      "solution": {
+        "page": "samples/crdt-notes-sync.html",
+        "statement": "Persist each Yjs document to IndexedDB on every change and sync updates over WebSocket when online, so the app keeps working while the server is unreachable."
+      },
+      "concern": {
+        "page": "https://www.inkandswitch.com/local-first/",
+        "statement": "Cloud apps stop working when the server is unreachable or the vendor shuts the service down."
+      }
+    }
+  ]
+}

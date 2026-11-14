@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sharing one SQLite database across tabs</title>
+    <link rel="stylesheet" href="sample.css" />
+  </head>
+  <body>
+    <main>
+      <p class="badge">Linka sample page: you can clip it without Gemini Nano</p>
+      <h1>Sharing one SQLite database across tabs</h1>
+      <p>
+        SQLite compiled to WebAssembly can keep its database file in the origin private file system
+        (OPFS). The fast path goes through a synchronous access handle, and that handle locks the
+        file: a second tab that opens the same database fails.
+      </p>
+      <h2>One owner, many clients</h2>
+      <p>
+        Instead of letting every tab open the file, open the database in a single dedicated worker
+        and send every tab's queries to it as messages. Use a named Web Lock to decide which tab
+        starts the worker; when that tab closes, the lock is released and the next tab in the queue
+        takes over.
+      </p>
+      <h2>What it costs</h2>
+      <p>
+        Every query now crosses a message boundary, so results are copied with the structured clone
+        algorithm. Batch small queries into one message where you can.
+      </p>
+    </main>
+  </body>
+</html>

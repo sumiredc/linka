@@ -1,0 +1,59 @@
+{
+  "path": "samples/keep-offline-data.html",
+  "title": "Keeping offline data from disappearing",
+  "extraction": {
+    "summary": "Lists two ways a local-first app loses data, edits kept only in memory and browser eviction, and how to guard against each.",
+    "concepts": [
+      { "name": "Local-first software", "category": "architecture" },
+      { "name": "Offline support", "category": "capability" },
+      { "name": "Persistent storage", "category": "capability" },
+      { "name": "Eviction", "category": "constraint" },
+      { "name": "Storage quota", "category": "constraint" },
+      { "name": "Data export", "category": "capability" }
+    ],
+    "authors": [],
+    "claims": [
+      {
+        "statement": "Unsynced edits kept only in JavaScript memory are lost if the tab closes before the next sync.",
+        "type": "concern",
+        "concepts": ["Offline support", "Local-first software"]
+      },
+      {
+        "statement": "Request persistent storage once the user has saved real work, and show quota usage so eviction does not come as a surprise.",
+        "type": "solution",
+        "concepts": ["Persistent storage", "Eviction", "Storage quota"]
+      },
+      {
+        "statement": "Even persistent storage can be cleared by the user, so local data still needs a copy outside the browser.",
+        "type": "concern",
+        "concepts": ["Persistent storage", "Data export"]
+      }
+    ],
+    "relatedConcepts": [
+      { "from": "Persistent storage", "to": "Data export" },
+      { "from": "Local-first software", "to": "Persistent storage" }
+    ]
+  },
+  "addresses": [
+    {
+      "solution": {
+        "page": "samples/keep-offline-data.html",
+        "statement": "Request persistent storage once the user has saved real work, and show quota usage so eviction does not come as a surprise."
+      },
+      "concern": {
+        "page": "https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria",
+        "statement": "Data in best-effort storage can be evicted by the browser without asking the user when the device runs low on disk space."
+      }
+    },
+    {
+      "solution": {
+        "page": "https://docs.yjs.dev/",
+        "statement": "The y-indexeddb provider stores a Yjs document in IndexedDB so offline edits survive a page reload."
+      },
+      "concern": {
+        "page": "samples/keep-offline-data.html",
+        "statement": "Unsynced edits kept only in JavaScript memory are lost if the tab closes before the next sync."
+      }
+    }
+  ]
+}
