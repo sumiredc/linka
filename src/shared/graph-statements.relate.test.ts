@@ -178,7 +178,7 @@ describe("buildClipStatements on Relate", () => {
     });
     runStatements(db, buildClipStatements(c));
     expect(
-      scalar(db, "MATCH (:Claim)-[:ABOUT]->(k:Concept {key: 'webworkers'}) RETURN count(k)"),
+      scalar(db, "MATCH (:Claim)-[:ABOUT]->(k:Concept {key: 'webworker'}) RETURN count(k)"),
     ).toBe(1);
   });
 

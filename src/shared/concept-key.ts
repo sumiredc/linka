@@ -2,6 +2,7 @@
  * 機械的な正規化のあとで、同じものを指す別名を 1 つの key に寄せる表。
  * 左右とも {@link mechanicalConceptKey} を通した形で書く（テストで確かめている）。
  * 寄せ先が別の別名になる連鎖は作らない。
+ * 単数形と複数形の揺れは単数形に寄せる。
  * 表を変えても、すでにグラフにある key は書き換わらない（新しいクリップから効く）。
  */
 export const CONCEPT_ALIASES: Readonly<Record<string, string>> = Object.freeze({
@@ -10,14 +11,13 @@ export const CONCEPT_ALIASES: Readonly<Record<string, string>> = Object.freeze({
   ecmascript: "javascript",
   ts: "typescript",
   nodejs: "node.js",
-  node: "node.js",
   k8s: "kubernetes",
   postgres: "postgresql",
   originprivatefilesystem: "opfs",
   llms: "llm",
   largelanguagemodel: "llm",
   largelanguagemodels: "llm",
-  webworker: "webworkers",
+  webworkers: "webworker",
   serviceworkers: "serviceworker",
 });
 

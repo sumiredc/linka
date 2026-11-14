@@ -31,6 +31,10 @@ describe("normalizeConceptKey", () => {
     expect(normalizeConceptKey("Node JS")).toBe("node.js");
   });
 
+  it("does not treat Node as Node.js, since graph articles use it for graph nodes", () => {
+    expect(normalizeConceptKey("Node")).toBe("node");
+  });
+
   it("returns the mechanical key when the name has no alias", () => {
     expect(normalizeConceptKey("CRDT")).toBe("crdt");
   });
@@ -52,6 +56,12 @@ describe("CONCEPT_ALIASES", () => {
   it("never points an alias at another alias", () => {
     for (const canonical of Object.values(CONCEPT_ALIASES)) {
       expect(Object.keys(CONCEPT_ALIASES)).not.toContain(canonical);
+    }
+  });
+
+  it("maps plural forms to singular, never singular to plural", () => {
+    for (const [alias, canonical] of Object.entries(CONCEPT_ALIASES)) {
+      expect(canonical).not.toBe(`${alias}s`);
     }
   });
 });
