@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Linka spike: offscreen clip",
+  "version": "0.0.1",
+  "description": "Checks that a toolbar popup can clip a page into a Relate graph owned by an offscreen document.",
+  "minimum_chrome_version": "138",
+  "permissions": ["sidePanel", "offscreen", "activeTab", "scripting"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": { "default_popup": "popup.html", "default_title": "Linka に記憶" },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+  }
+}
