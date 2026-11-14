@@ -242,12 +242,39 @@ flowchart LR
 ```
 
 - MV3。権限は `sidePanel`, `offscreen`, `activeTab`, `scripting`, `contextMenus`, `storage`。CSP に `'wasm-unsafe-eval'`。`minimum_chrome_version: "138"`。ツールバーのアイコンは `action.default_popup` で吹き出しを開く
-- 構成：Vite + React + TypeScript
+- 使う技術は §7.1 のとおり
 - DB は offscreen document（reason は `WORKERS`）1 か所だけが持ち、その中の dedicated worker で Relate を開く。吹き出しとサイドパネルは service worker 経由で依頼する。吹き出しが閉じても処理は offscreen document で続き、完了はサイドパネルに通知する（`spikes/offscreen-clip` で確認済み）
 - worker へのメッセージは 1 件ずつ処理する。panic（`isWasmTrap`）が起きたら worker を作り直す
 - Prompt API は offscreen document から呼ぶ（Worker からは使えないため）。抽出と判定には `responseConstraint`（JSON Schema）を使う。概念名に説明や推測の注記が付くことがあるので、プロンプトとスキーマで抑える
 - 抽出結果はコード側で、パラメータ付きの MERGE 文に変換して書き込む。質問（UC3）だけはモデルに Cypher を書かせる
 - 同じ `seed/demo.cypher` を、拡張機能の初回投入（`executeScript`）と、CLI での `data/linka.rl` 生成の両方に使う。Export も同じ形式で出し、CLI でもそのまま読めるようにする
+
+
+### 7.1 使用技術（2026-11-15 確定）
+
+バージョンは固定する（`--save-exact`）。「確認」の列は、この組み合わせで実際に動かしたかどうか。型検査・単体テスト・ビルド・lint は、下の組み合わせを使い捨てのプロジェクトに入れて、すべて通ることを確認した。
+
+| 用途 | 技術 | バージョン | 選んだ理由 | 確認 |
+|---|---|---|---|---|
+| グラフ DB | `@relate/relate-wasm` | 1.0.1 | ハッカソンの必須。offscreen document の dedicated worker で OPFS に永続化する | 検証 1・2 |
+| 端末内 AI | Chrome Prompt API（Gemini Nano） | Chrome 138 以上 | 端末の外へ送らずに抽出と質問ができる。`responseConstraint` で出力の形を指定する | 検証 2 |
+| 拡張機能 | Manifest V3（`action` の吹き出し、`side_panel`、`offscreen`、`activeTab`、`scripting`、`contextMenus`） | — | §7 の構成 | 検証 1・2 |
+| UI | React + TypeScript | React 19.3.1 / TypeScript 7.0.2 | 普段から使っていて、部品が増えても管理しやすい | 型検査 |
+| ビルド | Vite + `@vitejs/plugin-react` | 8.3.8 / 6.3.0 | 複数の HTML を入口にし、`manifest.json` は `public/` からそのままコピーする。拡張機能用のビルド補助（`@crxjs/vite-plugin` など）は入れない（素の Vite で足りることを検証で確認したため） | 検証 1・2、ビルド |
+| グラフ描画 | `react-force-graph-2d` | 1.29.2 | 力学モデルで配置するのがモックの見え方に合う。Canvas 描画で、ノードの形（ページ・概念・課題・解決策）を自分で描ける。強調表示は React の状態で切り替える | ビルド |
+| 本文抽出 | `@mozilla/readability` | 0.6.0 | Firefox のリーダービューと同じ仕組みで、記事の主要部分だけを取り出せる。`scripting.executeScript` でページの中で動かす。取り出せないページは `document.body.innerText` に戻す。最終更新は 2025-03 だが、機能は安定している | 型検査 |
+| 型とその検証 | `zod` | 4.6.7 | 1 つの定義から、`responseConstraint` に渡す JSON Schema（`z.toJSONSchema`）と、AI の出力を実行時に確かめる処理の両方を作れる | 単体テスト |
+| 見た目 | 素の CSS（CSS Modules と CSS カスタムプロパティ） | — | モックの色と文字の指定をそのまま移せる。Tailwind や CSS-in-JS は入れない | — |
+| 状態管理 | React の state と context | — | データの正は offscreen document の DB で、画面は問い合わせた結果を持つだけなので、状態管理のライブラリは要らない | — |
+| 画面と DB のやり取り | `chrome.runtime` のメッセージ（型は共有の TypeScript 定義） | — | ライブラリは入れない | 検証 2 |
+| 単体テスト | Vitest | 5.1.0 | Vite と同じ設定で動く。Cypher の組み立て、Concept 名の正規化、書き込みの拒否、スキーマを確かめる | 単体テスト |
+| E2E テスト | Playwright | 1.65.1 | 拡張機能を Chromium に読み込んで自動で確かめる方法が、検証で使えた | 検証 1・2 |
+| lint と整形 | Biome | 2.6.7 | 1 つの道具で lint と整形をまかなえる | 動作 |
+| 実行環境 | Node.js / npm | 24.18 / 12 | — | — |
+| `.rl` の作成と MCP | Relate CLI | 拡張機能の Wasm と同じ 1.0.x に揃える | `data/linka.rl` の作成と、UC4 の MCP 接続に使う。CLI は初期設定で利用状況を送信するので、README では `DO_NOT_TRACK=1` か `relate telemetry off` を案内する | 未確認 |
+| ライセンス | MIT | — | ハッカソンの推奨 | — |
+
+リポジトリの構成は 1 つのパッケージとし、`src/` の下を動く場所ごとに分ける：`background/`（service worker）、`offscreen/`（DB と AI）、`popup/`、`sidepanel/`、`content/`（ページの読み取り）、`shared/`（メッセージの型とスキーマ）。デモデータは `seed/`、同梱するストアは `data/` に置く。`mock/` と `spikes/` は参考として残す。
 
 ---
 
@@ -330,8 +357,7 @@ W1 のスパイクで Nano の Cypher 生成の成功率が低い（10 問中 5 
 
 ## 13. 未決事項（W1 のスパイクで決める）
 
-- グラフ表示のライブラリ（`react-force-graph-2d` か `cytoscape.js` か）
-- 本文抽出の方法（Readability 系のライブラリか、自前の簡易抽出か）
+- zod が作る JSON Schema（`$schema`・`enum`・`maxLength`・`maxItems` を含む）を、Prompt API の `responseConstraint` がそのまま受け付けるか。受け付けないキーワードがあれば、渡す前に取り除く
 - 分割の大きさ（`session.contextWindow` の実測値から）
 - 質問の書き込み拒否を、キーワード検査だけにするか、`EXPLAIN` の実行計画も見るか
 - Concept の別名表の持ち方
