@@ -222,7 +222,7 @@ flowchart LR
     Popup["ツールバーの吹き出し<br/>記憶"]
     Panel["サイドパネル（ウィンドウごと）<br/>グラフ・質問・書き出し"]
   end
-  SW["service worker<br/>offscreen document を作り、依頼を取り次ぐ"]
+  SW["service worker<br/>offscreen document を 1 つだけ作る"]
   subgraph Off["offscreen document（DB の唯一の持ち主）"]
     AI["Prompt API (Gemini Nano)<br/>抽出・ADDRESSES 判定・Cypher 生成"]
     subgraph Worker["Dedicated Worker"]
@@ -232,9 +232,11 @@ flowchart LR
   end
   DOM -->|"scripting.executeScript<br/>(activeTab)"| Popup
   DOM --> Panel
-  Popup --> SW
-  Panel <--> SW
-  SW <--> AI
+  Popup -.->|用意を頼む| SW
+  Panel -.->|用意を頼む| SW
+  SW -.->|作る| Off
+  Popup -->|依頼| AI
+  Panel <-->|"依頼・変化の通知"| AI
   AI <-->|postMessage| DB
   DB --- OPFS
   Panel -->|"書き出し (.cypher)"| CLI["relate CLI → linka.rl → MCP → Claude Code / Codex"]
@@ -242,7 +244,7 @@ flowchart LR
 
 - MV3。権限は `sidePanel`, `offscreen`, `activeTab`, `scripting`, `storage`、それにアイコンの記憶済みの印のための `tabs`（要るかは Phase 1 で確かめる。入れるとインストール時に「閲覧履歴の読み取り」の警告が出るが、受け入れる。2026-11-15 に決定）。選択範囲のクリップを入れるときは `contextMenus` を足す。CSP に `'wasm-unsafe-eval'`。`minimum_chrome_version: "138"`。ツールバーのアイコンは `action.default_popup` で吹き出しを開く
 - 使う技術は §7.1 のとおり
-- DB は offscreen document（reason は `WORKERS`）1 か所だけが持ち、その中の dedicated worker で Relate を開く。吹き出しとサイドパネルは service worker 経由で依頼する。吹き出しが閉じても処理は offscreen document で続き、完了はサイドパネルに通知する（`spikes/offscreen-clip` で確認済み）
+- DB は offscreen document（reason は `WORKERS`）1 か所だけが持ち、その中の dedicated worker で Relate を開く。service worker は offscreen document を 1 つだけ作る役で、依頼は取り次がない。吹き出しとサイドパネルは、service worker に offscreen document を用意させてから、依頼を offscreen document に直接送る。DB の変化は offscreen document から拡張機能のすべてのページに直接知らせる。service worker は Chrome に休止させられることがあり、長い依頼の返事を service worker が持っていると、書き込みは済んだのに返事だけが失われるため。吹き出しが閉じても処理は offscreen document で続き、完了はサイドパネルに通知する（`spikes/offscreen-clip` で確認済み）
 - worker へのメッセージは 1 件ずつ処理する。panic（`isWasmTrap`）が起きたら worker を作り直す
 - Prompt API は offscreen document から呼ぶ（Worker からは使えないため）。抽出と判定には `responseConstraint`（JSON Schema）を使う。概念名に説明や推測の注記が付くことがあるので、プロンプトとスキーマで抑える
 - 抽出結果はコード側で、パラメータ付きの MERGE 文に変換して書き込む。質問（UC3）だけはモデルに Cypher を書かせる
