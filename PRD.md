@@ -94,12 +94,12 @@ flowchart LR
 | ノード | プロパティ | 識別の仕方（MERGE のキー） |
 |---|---|---|
 | `Page` | `url`, `title`, `summary`, `clippedAt`, `source`（`page` / `selection` / `sample`） | `url`（フラグメントと `utm_*` などの追跡パラメータを除いて正規化） |
-| `Concept` | `key`, `name`（表示名）, `category` | `key` = 名前を NFKC で揃えて小文字化し、空白・ハイフン・アンダースコアを除いたもの（`Web Assembly`/`web-assembly`/`WebAssembly` はここで同じになる）を、別名表（`wasm` → `webassembly` など）で寄せたもの |
+| `Concept` | `key`, `name`（表示名）, `category` | `key` = 名前を NFKC で揃えて小文字化し、空白・ハイフン・アンダースコアを除いたもの（`Web Assembly`/`web-assembly`/`WebAssembly` はここで同じになる）を、別名表（`wasm` → `webassembly` など）で寄せたもの。記号や空白だけで key が空になる名前は Concept にしない |
 | `Person` | `name` | `name` を正規化したもの（前後と連続する空白、互換文字を揃える。表示にも使うので大文字小文字は変えない） |
 | `Claim` | `id`, `statement`, `type`（`benefit` / `concern` / `solution` / `fact`）, `source`（`page`：ページ全体から抽出 / `selection`：選択範囲から / `sample`：同梱サンプルの事前抽出） | `id` = 正規化 URL ＋ `#claim-` ＋ 文（空白を揃えたもの）の FNV-1a 64 ビットのハッシュ |
 
 - `ADDRESSES` は「あるページの solution が、**別のページ**の concern を解決する」場合だけ張る。同じページ内では張らない
-- 再クリップでは、そのページが `ASSERTS` する Claim のうちページ全体から抽出したもの（`source` が `page` と `sample`。それに付いた `ABOUT`・`ADDRESSES` も）と、ページの `MENTIONS`・`AUTHORED_BY` を消してから入れ直す。Concept と Person は他のページが参照しうるので消さない
+- 再クリップでは、そのページが `ASSERTS` する Claim のうちページ全体から抽出したもの（`source` が `page` と `sample`。それに付いた `ABOUT`・`ADDRESSES` も）と、ページの `MENTIONS`・`AUTHORED_BY` を消してから入れ直す。ただし、残した選択範囲の Claim が `ABOUT` で指す Concept への `MENTIONS` は張り直す。Concept と Person は他のページが参照しうるので消さない。Concept 同士の `RELATED_TO` もページをまたいで積み上がる関係で、ページの持ち物ではないので消さない
 - 選択範囲のクリップ（§10 で後回し）は、同じ URL の Page に Claim を**追加**する。選択範囲から足した Claim は再クリップでも消さない（利用者が自分で選んだものだから。2026-11-15 に決定）。選択範囲のクリップでは Page の `title`・`summary` などを上書きしない。ページ全体の抽出が選択範囲と同じ文を出したときは同じ Claim になり、`source` は `selection` のまま残す
 
 ---
@@ -362,7 +362,7 @@ W1 のスパイクで Nano の Cypher 生成の成功率が低い（10 問中 5 
 - zod が作る JSON Schema（`$schema`・`enum`・`maxLength`・`maxItems` を含む）を、Prompt API の `responseConstraint` がそのまま受け付けるか。受け付けないキーワードがあれば、渡す前に取り除く
 - 分割の大きさ（`session.contextWindow` の実測値から）
 - ~~質問の書き込み拒否を、キーワード検査だけにするか、`EXPLAIN` の実行計画も見るか~~ → キーワード検査だけにする（2026-11-15 に決定）。Cypher を字句に分けてから句のキーワードを探すので、文字列・コメント・プロパティ名・ラベル・マップのキーにある同じ綴りでは拒否しない。`INSERT`（Relate 1.0.1 は GQL の `INSERT` で書き込む）とスキーマ・管理の句も拒否し、手続きの呼び出しはグラフの形を読む `db.labels` などだけを通す。閉じていない文字列やコメントは拒否する。`EXPLAIN` を使わない理由は、Relate の実行計画では `CALL { … }` の副問い合わせが `CallSubquery` の 1 つにまとまり、中の書き込みが見えないため（キーワード検査より見落とす）
-- ~~Concept の別名表の持ち方~~ → コードの中の定数（`src/shared/concept-key.ts` の `CONCEPT_ALIASES`）にする（2026-11-15 に決定）。拡張機能・seed の生成・書き出しが同じ key を作る必要があり、コードに置けば 1 か所で済み、テストで表の形（左右とも正規化済み・別名の連鎖が無い）を確かめられる。MVP には表を編集する画面が無いので、グラフや設定に持つ理由が無い。表を変えても、すでにグラフにある key は書き換わらない（新しいクリップから効く）
+- ~~Concept の別名表の持ち方~~ → コードの中の定数（`src/shared/concept-key.ts` の `CONCEPT_ALIASES`）にする（2026-11-15 に決定）。拡張機能・seed の生成・書き出しが同じ key を作る必要があり、コードに置けば 1 か所で済み、テストで表の形（左右とも正規化済み・別名の連鎖が無い・複数形は単数形に寄せる）を確かめられる。MVP には表を編集する画面が無いので、グラフや設定に持つ理由が無い。表を変えても、すでにグラフにある key は書き換わらない（新しいクリップから効く）
 - アイコンの記憶済みの印に `tabs` 権限が要るか。サイドパネルの記憶ボタンで `activeTab` が付与されるか。モデルのダウンロードの開始に利用者の操作が要るか
 - Relate CLI が入り、`relate -d x.rl < seed` と `relate serve --mcp stdio` が動くか（版を記録する）
 - Nano が無くても記憶できるサンプルページを、実在する記事にするか、拡張機能に同梱するページにするか
