@@ -252,7 +252,7 @@ flowchart LR
 
 ### 7.1 使用技術（2026-11-15 確定）
 
-バージョンは固定する（`pnpm add --save-exact`）。どれも 2026-11-15 時点の正式版の最新（npm の `latest`）で、プレビュー版（beta・rc・next など）は選ばない。「確認」の列は、この組み合わせで実際に動かしたかどうか。型検査・単体テスト・ビルド・lint は、下の組み合わせを使い捨てのプロジェクトに入れて、すべて通ることを確認した。
+バージョンは固定する（`--save-exact`）。どれも 2026-11-15 時点の正式版の最新（npm の `latest`）で、プレビュー版（beta・rc・next など）は選ばない。「確認」の列は、この組み合わせで実際に動かしたかどうか。型検査・単体テスト・ビルド・lint は、下の組み合わせを使い捨てのプロジェクトに入れて、すべて通ることを確認した。
 
 | 用途 | 技術 | バージョン | 選んだ理由 | 確認 |
 |---|---|---|---|---|
@@ -270,8 +270,7 @@ flowchart LR
 | 単体テスト | Vitest | 5.1.0 | Vite と同じ設定で動く。Cypher の組み立て、Concept 名の正規化、書き込みの拒否、スキーマを確かめる | 単体テスト |
 | E2E テスト | Playwright | 1.65.1 | 拡張機能を Chromium に読み込んで自動で確かめる方法が、検証で使えた | 検証 1・2 |
 | lint と整形 | Biome | 2.6.7 | 1 つの道具で lint と整形をまかなえる | 動作 |
-| 実行環境 | Node.js | 26.13.1（現行の LTS） | `package.json` の `volta`（`volta pin`）と `engines` で固定する | 型検査・単体テスト・ビルド・lint・E2E |
-| パッケージ管理 | pnpm | 12.18.0 | `package.json` の `packageManager` で固定する。pnpm は、どの版で起動してもこの版に自動で切り替わる（確認済み）。Volta 1.1.1 は pnpm 12 を起動できず、Corepack は Node 25 以降に同梱されないため、この 2 つでは固定しない。審査員には README で pnpm の入れ方（`npm install -g pnpm` など）を案内する | 型検査・単体テスト・ビルド・lint・E2E |
+| 実行環境 | Node.js / npm | 26.13.1（現行の LTS）/ 12.2.2 | 開発者ごとの版のずれを防ぐため、`package.json` の `volta` と `engines` で固定する | 型検査・単体テスト・ビルド・lint・E2E |
 | `.rl` の作成と MCP | Relate CLI | 拡張機能の Wasm と同じ 1.0.x に揃える | `data/linka.rl` の作成と、UC4 の MCP 接続に使う。CLI は初期設定で利用状況を送信するので、README では `DO_NOT_TRACK=1` か `relate telemetry off` を案内する | 未確認 |
 | ライセンス | MIT | — | ハッカソンの推奨 | — |
 
@@ -300,7 +299,7 @@ flowchart LR
 | Relate and connected context（30） | ページをまたぐ `ADDRESSES` と多段の経路の質問を中心に置き、結果の経路をグラフ上で強調する。OPFS での永続化、`.rl` と MCP での連携まで Relate の機能を通して使う |
 | Functionality and completeness（25） | Nano が無い環境でも、デモデータ・サンプルのクリップ・書き出しが動く（UC5）。質問は Nano が必要 |
 | Usefulness（20） | 「技術選定の調査 → エージェントへの引き継ぎ」という一続きの流れをデモで見せる |
-| Documentation and reproducibility（15） | `pnpm install && pnpm build` → `chrome://extensions` で `dist/` を読み込む、の手順だけで UC5 まで届くようにする。CLI での `.rl` の確認手順も載せる |
+| Documentation and reproducibility（15） | `npm install && npm run build` → `chrome://extensions` で `dist/` を読み込む、の手順だけで UC5 まで届くようにする。CLI での `.rl` の確認手順も載せる |
 | Creativity（10） | 課題↔解決策のつながりと、人の調査をエージェントの文脈にするという使い方 |
 
 ## 10. MVP の範囲
