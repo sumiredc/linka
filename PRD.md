@@ -43,7 +43,7 @@ Linka は、読んだページから概念・主張（課題・解決策など�
 | プライバシー | 既定では、ページ本文・抽出結果・グラフを端末の外へ送信しない。自前サーバーは使わない（Gemini Nano のモデル取得を除く）。外部 API に送るのは、利用者が §10.1 の設定で外部のエンドポイントを指定し、警告を確認したときだけ |
 | 永続性 | クリップした内容は、サイドパネルや Chrome を閉じても残り、次に開いたとき同じグラフが表示される |
 | 重複 | 同じ URL を二度クリップしても Page は 1 つ。同じ名前の Concept は 1 つにまとまる（正規化規則は §5） |
-| 再クリップ | 同じ URL を再クリップすると、そのページ由来の Claim と関係は新しい抽出結果で置き換わり、古いものは残らない |
+| 再クリップ | 同じ URL を再クリップすると、そのページ全体から抽出した Claim と関係は新しい抽出結果で置き換わり、古いものは残らない（選択範囲から足した Claim は残す） |
 | 整合性 | 抽出やグラフ書き込みが途中で失敗したら、そのクリップは「失敗」と表示し、既存のグラフは壊さない（§4 UC1 の例外フロー） |
 | 読み取り専用の質問 | 質問（UC3）はグラフを変更しない |
 | 点検可能性 | グラフの内容を Cypher として書き出せ、Relate CLI で `.rl` ファイルにして中身を確認できる |
@@ -96,11 +96,11 @@ flowchart LR
 | `Page` | `url`, `title`, `summary`, `clippedAt`, `source`（`page` / `selection` / `sample`） | `url`（フラグメントと `utm_*` などの追跡パラメータを除いて正規化） |
 | `Concept` | `key`, `name`（表示名）, `category` | `key` = 名前を小文字化・前後空白除去・記号の揺れ（`Web Assembly`/`WebAssembly` 等）を同梱の別名表で寄せたもの |
 | `Person` | `name` | `name` を正規化したもの |
-| `Claim` | `id`, `statement`, `type`（`benefit` / `concern` / `solution` / `fact`） | `id` = 正規化 URL ＋ 文のハッシュ |
+| `Claim` | `id`, `statement`, `type`（`benefit` / `concern` / `solution` / `fact`）, `source`（`page`：ページ全体から抽出 / `selection`：選択範囲から / `sample`：同梱サンプルの事前抽出） | `id` = 正規化 URL ＋ 文のハッシュ |
 
 - `ADDRESSES` は「あるページの solution が、**別のページ**の concern を解決する」場合だけ張る。同じページ内では張らない
-- 再クリップでは、そのページが `ASSERTS` する Claim（と、それに付いた `ABOUT`・`ADDRESSES`）と `MENTIONS` を消してから入れ直す。Concept と Person は他のページが参照しうるので消さない
-- 選択範囲のクリップは、同じ URL の Page に Claim を**追加**する（ページ全体の Claim は消さない）
+- 再クリップでは、そのページが `ASSERTS` する Claim のうちページ全体から抽出したもの（と、それに付いた `ABOUT`・`ADDRESSES`）と `MENTIONS` を消してから入れ直す。Concept と Person は他のページが参照しうるので消さない
+- 選択範囲のクリップ（§10 で後回し）は、同じ URL の Page に Claim を**追加**する。選択範囲から足した Claim は再クリップでも消さない（利用者が自分で選んだものだから。2026-11-15 に決定）
 
 ---
 
@@ -121,7 +121,6 @@ flowchart LR
   - 続けて UC2 が走る
 - 代替フロー：
   - サイドパネルの記憶ボタンからも同じように記憶できる。進み具合と結果はサイドパネルに表示される
-  - 右クリックメニュー「Add selection to Linka」で、選択範囲だけをクリップできる
   - 記憶済みのページでアイコンを押すと、吹き出しに「記憶済み」と「記憶し直す」「サイドパネルで見る」が出る
   - 同じ URL を再クリップすると、そのページ由来の内容が置き換わる（§5）
   - 本文が長い場合は分割して抽出し、結果をまとめる
@@ -241,7 +240,7 @@ flowchart LR
   Panel -->|"書き出し (.cypher)"| CLI["relate CLI → linka.rl → MCP → Claude Code / Codex"]
 ```
 
-- MV3。権限は `sidePanel`, `offscreen`, `activeTab`, `scripting`, `contextMenus`, `storage`。CSP に `'wasm-unsafe-eval'`。`minimum_chrome_version: "138"`。ツールバーのアイコンは `action.default_popup` で吹き出しを開く
+- MV3。権限は `sidePanel`, `offscreen`, `activeTab`, `scripting`, `storage`、それにアイコンの記憶済みの印のための `tabs`（要るかは Phase 1 で確かめる。入れるとインストール時に「閲覧履歴の読み取り」の警告が出るが、受け入れる。2026-11-15 に決定）。選択範囲のクリップを入れるときは `contextMenus` を足す。CSP に `'wasm-unsafe-eval'`。`minimum_chrome_version: "138"`。ツールバーのアイコンは `action.default_popup` で吹き出しを開く
 - 使う技術は §7.1 のとおり
 - DB は offscreen document（reason は `WORKERS`）1 か所だけが持ち、その中の dedicated worker で Relate を開く。吹き出しとサイドパネルは service worker 経由で依頼する。吹き出しが閉じても処理は offscreen document で続き、完了はサイドパネルに通知する（`spikes/offscreen-clip` で確認済み）
 - worker へのメッセージは 1 件ずつ処理する。panic（`isWasmTrap`）が起きたら worker を作り直す
@@ -268,7 +267,7 @@ flowchart LR
 | 状態管理 | React の state と context | — | データの正は offscreen document の DB で、画面は問い合わせた結果を持つだけなので、状態管理のライブラリは要らない | — |
 | 画面と DB のやり取り | `chrome.runtime` のメッセージ（型は共有の TypeScript 定義） | — | ライブラリは入れない | 検証 2 |
 | 単体テスト | Vitest | 5.1.0 | Vite と同じ設定で動く。Cypher の組み立て、Concept 名の正規化、書き込みの拒否、スキーマを確かめる | 単体テスト |
-| E2E テスト | Playwright | 1.65.1 | 拡張機能を Chromium に読み込んで自動で確かめる方法が、検証で使えた | 検証 1・2 |
+| E2E テスト | Playwright | 1.65.1 | 拡張機能を Chromium に読み込んで自動で確かめる方法が、検証で使えた。CI にはコストが重いので当面入れず、単体テストを重視する | 検証 1・2 |
 | lint と整形 | Biome | 2.6.7 | 1 つの道具で lint と整形をまかなえる | 動作 |
 | 実行環境 | Node.js / npm | 26.13.1（現行の LTS）/ 12.2.2 | 開発者ごとの版のずれを防ぐため、`package.json` の `volta` と `engines` で固定する | 型検査・単体テスト・ビルド・lint・E2E |
 | `.rl` の作成と MCP | Relate CLI | 拡張機能の Wasm と同じ 1.0.x に揃える | `data/linka.rl` の作成と、UC4 の MCP 接続に使う。CLI は初期設定で利用状況を送信するので、README では `DO_NOT_TRACK=1` か `relate telemetry off` を案内する | 未確認 |
@@ -282,7 +281,7 @@ flowchart LR
 
 | 要件（出どころ） | 対応 | 状態 |
 |---|---|---|
-| 公開リポジトリと topic `relate`（Rules §3・§4、Overview） | 設定済み。`relate-neo4j-hackathon` も付ける | 設定済み |
+| 公開リポジトリと topic `relate`（Rules §3・§4、Overview） | topic は設定済み。`relate-neo4j-hackathon` も付ける。リポジトリは self-hosted runner を消すまで private のままにし、提出の直前に公開する（#4） | topic は設定済み、公開は未 |
 | プロジェクトの説明：何をするか・なぜ役立つか・何と何をつなぐか（Rules §4、Overview） | Devpost に英語で書く（§1 から） | 未着手 |
 | README（setup / use、指定テンプレート）（Overview） | Use case / How it uses Relate（Mode：拡張機能内は OPFS、同梱は single file。理由：Wasm で永続化できるのは OPFS だけで、審査員が点検できるよう同じ内容を `.rl` でも同梱）/ Setup and run / Where the data lives | 未着手 |
 | 永続化されたストア（Overview） | `data/linka.rl`（`seed/demo.cypher` から CLI で生成） | 未着手 |
@@ -311,6 +310,7 @@ flowchart LR
 | | Claim の矛盾検出（`CONTRADICTS`） |
 | | 抽出結果の手動編集 |
 | | 日本語ページの抽出（Nano は ja に対応しているが、デモと審査は英語で行う） |
+| | 右クリックメニューからの選択範囲のクリップ（UC1 の代替フローから外した。2026-11-15 に決定） |
 | | AI の切り替え（§10.1。優先度は最も低い） |
 
 ### 10.1 追加機能：AI のエンドポイントを切り替える（優先度：低）
@@ -336,10 +336,12 @@ Nano が使えない環境や、Nano より大きいモデルで抽出と質問�
 
 | 週 | 期間 | やること | 終わりの判定 |
 |---|---|---|---|
-| W1 | 〜11/22 | 技術スパイク：拡張機能の Worker で Relate Wasm と OPFS が動くか／`responseConstraint` で抽出できるか／Nano が書く Cypher の成功率をデモデータ相手の質問 10 問で測る | 3 つとも結果が出て、§12 の未決事項が決まっている |
-| W2 | 〜11/29 | UC1 と UC5（クリップ → 抽出 → 書き込み → グラフ表示、デモデータ投入） | 記事 3 本をクリップして、再起動後も残っている |
-| W3 | 〜12/6 | UC2・UC3・UC4 | デモの筋書きを最初から最後まで通せる |
-| W4 | 〜12/10 | `data/linka.rl`、README、動画、Devpost 提出 | 提出済み、topic と公開状態を確認済み |
+| W1 | 〜11/23 | Phase 1：拡張機能の土台、DB 層、ドメイン処理、デモデータ、残りの検証（`responseConstraint`、Nano が書く Cypher の成功率をデモデータ相手の質問 10 問で、権限、Relate CLI） | 検証の結果が出て、§13 の未決事項が決まっている |
+| W2 | 〜12/02 | Phase 2：UC1 と UC5（クリップ → 抽出 → 書き込み → グラフ表示、デモデータ投入） | 記事 3 本をクリップして、再起動後も残っている |
+| W3 | 〜12/07 | Phase 3：UC2・UC3・UC4 | デモの筋書きを最初から最後まで通せる |
+| W4 | 〜12/10 | Phase 4：`data/linka.rl`、README、動画、Devpost 提出 | 提出済み、topic と公開状態を確認済み |
+
+各フェーズは GitHub の milestone で管理し、最後の振り返りで PRD との食い違い・考慮漏れ・決めるべきことを確かめてから次に進む。見積もりの合計は約 40 時間で、使える時間（約 36 時間）を少し超えるが、受け入れる（2026-11-15 に決定）。
 
 W1 のスパイクで Nano の Cypher 生成の成功率が低い（10 問中 5 問未満）場合は、Nano に Cypher を書かせず、用意した問い合わせの種類と対象だけを選ばせる方式に切り替える（画面は自由文の入力欄のまま）。
 
@@ -355,9 +357,16 @@ W1 のスパイクで Nano の Cypher 生成の成功率が低い（10 問中 5 
 | 拡張機能のページから OPFS の Worker が使えない | **解消（2026-11-15）。** `spikes/relate-opfs` で、拡張機能のページから起動した dedicated worker で OPFS に書き込めること、ページの開き直し・ブラウザの再起動後も残ること、2 か所目は `storage locked` になることを確認した（Playwright の Chromium 159 での自動確認に加え、Chrome 157 の実際のサイドパネルでも、閉じて開き直したあと・Chrome を再起動したあとに件数が変わらないことを手動で確認した） |
 | サイドパネルを開かずに記憶できない（吹き出しは閉じると止まる） | **解消（2026-11-15）。** `spikes/offscreen-clip` で、吹き出しを閉じても offscreen document で記憶が最後まで終わること、offscreen document で Gemini Nano が実際の記事から抽出できること（2〜4 秒）、35 秒放置しても offscreen document が残ること、ブラウザの再起動後もデータが残ることを確認した（Playwright の Chromium での自動確認と、Chrome での手動確認） |
 
-## 13. 未決事項（W1 のスパイクで決める）
+## 13. 未決事項（Phase 1 で決める）
 
 - zod が作る JSON Schema（`$schema`・`enum`・`maxLength`・`maxItems` を含む）を、Prompt API の `responseConstraint` がそのまま受け付けるか。受け付けないキーワードがあれば、渡す前に取り除く
 - 分割の大きさ（`session.contextWindow` の実測値から）
 - 質問の書き込み拒否を、キーワード検査だけにするか、`EXPLAIN` の実行計画も見るか
 - Concept の別名表の持ち方
+- アイコンの記憶済みの印に `tabs` 権限が要るか。サイドパネルの記憶ボタンで `activeTab` が付与されるか。モデルのダウンロードの開始に利用者の操作が要るか
+- Relate CLI が入り、`relate -d x.rl < seed` と `relate serve --mcp stdio` が動くか（版を記録する）
+- Nano が無くても記憶できるサンプルページを、実在する記事にするか、拡張機能に同梱するページにするか
+
+Phase 3 で決めるもの：
+
+- UC2 で Nano に判定させる組の数の上限
