@@ -1,0 +1,652 @@
+{
+  "clips": [
+    {
+      "url": "https://www.inkandswitch.com/local-first/",
+      "title": "Local-first software: You own your data, in spite of the cloud",
+      "clippedAt": "2026-11-14T09:00:00Z",
+      "source": "page",
+      "extraction": {
+        "summary": "An essay arguing that apps should keep the primary copy of user data on the device, work offline, and sync between devices, and evaluating which technologies can deliver that.",
+        "concepts": [
+          { "name": "Local-first software", "category": "architecture" },
+          { "name": "Offline support", "category": "capability" },
+          { "name": "CRDT", "category": "sync" },
+          { "name": "Data ownership", "category": "principle" }
+        ],
+        "authors": ["Martin Kleppmann", "Adam Wiggins", "Peter van Hardenberg", "Mark McGranaghan"],
+        "claims": [
+          {
+            "statement": "Cloud apps stop working when the server is unreachable or the vendor shuts the service down.",
+            "type": "concern",
+            "concepts": ["Offline support", "Data ownership"]
+          },
+          {
+            "statement": "When people edit the same data offline on different devices, the edits must be merged later without losing anyone's work.",
+            "type": "concern",
+            "concepts": ["Local-first software", "CRDT"]
+          },
+          {
+            "statement": "Keeping the primary copy of data on the device makes reads and writes fast because they do not wait for the network.",
+            "type": "benefit",
+            "concepts": ["Local-first software"]
+          },
+          {
+            "statement": "The essay presents CRDTs as a promising foundation for local-first apps.",
+            "type": "fact",
+            "concepts": ["CRDT", "Local-first software"]
+          }
+        ],
+        "relatedConcepts": [
+          { "from": "Local-first software", "to": "CRDT" },
+          { "from": "Local-first software", "to": "Offline support" }
+        ]
+      }
+    },
+    {
+      "url": "https://crdt.tech/",
+      "title": "About CRDTs",
+      "clippedAt": "2026-11-14T09:10:00Z",
+      "source": "page",
+      "extraction": {
+        "summary": "An overview of conflict-free replicated data types: data structures that can be updated independently on several replicas and always merge to the same result.",
+        "concepts": [
+          { "name": "CRDT", "category": "sync" },
+          { "name": "Eventual consistency", "category": "sync" },
+          { "name": "Local-first software", "category": "architecture" }
+        ],
+        "authors": [],
+        "claims": [
+          {
+            "statement": "CRDTs merge concurrent updates automatically, so every replica converges to the same state without a central server deciding the order.",
+            "type": "solution",
+            "concepts": ["CRDT", "Eventual consistency"]
+          },
+          {
+            "statement": "A CRDT replica can be updated locally without coordinating with other replicas first.",
+            "type": "fact",
+            "concepts": ["CRDT"]
+          }
+        ],
+        "relatedConcepts": [
+          { "from": "CRDT", "to": "Eventual consistency" },
+          { "from": "CRDT", "to": "Local-first software" }
+        ]
+      }
+    },
+    {
+      "url": "https://docs.yjs.dev/",
+      "title": "Yjs Docs",
+      "clippedAt": "2026-11-14T09:20:00Z",
+      "source": "page",
+      "extraction": {
+        "summary": "Documentation for Yjs, a CRDT library that exposes shared types such as maps, arrays and text, with pluggable providers for network sync and local persistence.",
+        "concepts": [
+          { "name": "Yjs", "category": "library" },
+          { "name": "CRDT", "category": "sync" },
+          { "name": "IndexedDB", "category": "storage" },
+          { "name": "Offline support", "category": "capability" }
+        ],
+        "authors": [],
+        "claims": [
+          {
+            "statement": "Yjs shared types let several users edit the same document concurrently and merge their changes automatically.",
+            "type": "solution",
+            "concepts": ["Yjs", "CRDT"]
+          },
+          {
+            "statement": "The y-indexeddb provider stores a Yjs document in IndexedDB so offline edits survive a page reload.",
+            "type": "solution",
+            "concepts": ["Yjs", "IndexedDB", "Offline support"]
+          },
+          {
+            "statement": "Yjs is network-agnostic: sync runs through separate providers such as WebSocket or WebRTC.",
+            "type": "fact",
+            "concepts": ["Yjs"]
+          }
+        ],
+        "relatedConcepts": [{ "from": "Yjs", "to": "CRDT" }, { "from": "Yjs", "to": "IndexedDB" }]
+      }
+    },
+    {
+      "url": "https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API",
+      "title": "IndexedDB API - Web APIs | MDN",
+      "clippedAt": "2026-11-14T09:30:00Z",
+      "source": "page",
+      "extraction": {
+        "summary": "Reference for IndexedDB, a transactional, asynchronous key-value database built into browsers for storing large amounts of structured data, including files and blobs.",
+        "concepts": [
+          { "name": "IndexedDB", "category": "storage" },
+          { "name": "Web Worker", "category": "platform" },
+          { "name": "Service Worker", "category": "platform" },
+          { "name": "Transaction", "category": "database" }
+        ],
+        "authors": [],
+        "claims": [
+          {
+            "statement": "IndexedDB is asynchronous and is available both in windows and in workers, so storage calls do not block page rendering.",
+            "type": "solution",
+            "concepts": ["IndexedDB", "Web Worker"]
+          },
+          {
+            "statement": "Because IndexedDB is available inside service workers, a service worker can save its state there and restore it after it restarts.",
+            "type": "solution",
+            "concepts": ["IndexedDB", "Service Worker"]
+          },
+          {
+            "statement": "The low-level, event-based IndexedDB API is verbose, so many projects use a wrapper library.",
+            "type": "concern",
+            "concepts": ["IndexedDB"]
+          },
+          {
+            "statement": "Every IndexedDB read and write happens inside a transaction.",
+            "type": "fact",
+            "concepts": ["IndexedDB", "Transaction"]
+          }
+        ],
+        "relatedConcepts": [
+          { "from": "IndexedDB", "to": "Transaction" },
+          { "from": "IndexedDB", "to": "Service Worker" }
+        ]
+      }
+    },
+    {
+      "url": "https://web.dev/articles/storage-for-the-web",
+      "title": "Storage for the web",
+      "clippedAt": "2026-11-14T09:40:00Z",
+      "source": "page",
+      "extraction": {
+        "summary": "A guide to choosing among browser storage mechanisms, recommending IndexedDB and the Cache Storage API and explaining quotas and persistence.",
+        "concepts": [
+          { "name": "localStorage", "category": "storage" },
+          { "name": "IndexedDB", "category": "storage" },
+          { "name": "Cache Storage", "category": "storage" },
+          { "name": "Storage quota", "category": "constraint" }
+        ],
+        "authors": [],
+        "claims": [
+          {
+            "statement": "localStorage is synchronous, blocks the main thread while it reads or writes, and cannot be used from workers.",
+            "type": "concern",
+            "concepts": ["localStorage", "Web Worker"]
+          },
+          {
+            "statement": "IndexedDB and the Cache Storage API are the recommended places for app data and network resources.",
+            "type": "fact",
+            "concepts": ["IndexedDB", "Cache Storage"]
+          },
+          {
+            "statement": "navigator.storage.estimate() reports how much of the quota an origin is using.",
+            "type": "fact",
+            "concepts": ["Storage quota"]
+          }
+        ],
+        "relatedConcepts": [
+          { "from": "IndexedDB", "to": "Storage quota" },
+          { "from": "Cache Storage", "to": "Storage quota" }
+        ]
+      }
+    },
+    {
+      "url": "https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria",
+      "title": "Storage quotas and eviction criteria - Web APIs | MDN",
+      "clippedAt": "2026-11-14T09:50:00Z",
+      "source": "page",
+      "extraction": {
+        "summary": "Explains how much data an origin may store, how the limit is shared across storage APIs, and when browsers delete stored data.",
+        "concepts": [
+          { "name": "Storage quota", "category": "constraint" },
+          { "name": "Eviction", "category": "constraint" },
+          { "name": "Persistent storage", "category": "capability" },
+          { "name": "OPFS", "category": "storage" }
+        ],
+        "authors": [],
+        "claims": [
+          {
+            "statement": "Data in best-effort storage can be evicted by the browser without asking the user when the device runs low on disk space.",
+            "type": "concern",
+            "concepts": ["Eviction", "Storage quota"]
+          },
+          {
+            "statement": "The quota is shared by IndexedDB, Cache Storage and OPFS for the same origin.",
+            "type": "fact",
+            "concepts": ["Storage quota", "IndexedDB", "OPFS"]
+          },
+          {
+            "statement": "Eviction removes all of an origin's data at once rather than individual entries.",
+            "type": "fact",
+            "concepts": ["Eviction"]
+          }
+        ],
+        "relatedConcepts": [
+          { "from": "Storage quota", "to": "Eviction" },
+          { "from": "Eviction", "to": "Persistent storage" }
+        ]
+      }
+    },
+    {
+      "url": "https://developer.mozilla.org/en-US/docs/Web/API/StorageManager/persist",
+      "title": "StorageManager: persist() method - Web APIs | MDN",
+      "clippedAt": "2026-11-14T10:00:00Z",
+      "source": "page",
+      "extraction": {
+        "summary": "Reference for navigator.storage.persist(), which asks the browser to mark an origin's storage as persistent.",
+        "concepts": [
+          { "name": "Persistent storage", "category": "capability" },
+          { "name": "Eviction", "category": "constraint" }
+        ],
+        "authors": [],
+        "claims": [
+          {
+            "statement": "Calling navigator.storage.persist() asks the browser to exclude the origin's data from automatic eviction.",
+            "type": "solution",
+            "concepts": ["Persistent storage", "Eviction"]
+          },
+          {
+            "statement": "persist() resolves to a boolean that tells whether the request was granted.",
+            "type": "fact",
+            "concepts": ["Persistent storage"]
+          }
+        ],
+        "relatedConcepts": [{ "from": "Persistent storage", "to": "Eviction" }]
+      }
+    },
+    {
+      "url": "https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system",
+      "title": "Origin private file system - Web APIs | MDN",
+      "clippedAt": "2026-11-14T10:10:00Z",
+      "source": "page",
+      "extraction": {
+        "summary": "Describes the origin private file system, a per-origin file system that is invisible to the user and offers fast synchronous access from workers.",
+        "concepts": [
+          { "name": "OPFS", "category": "storage" },
+          { "name": "Sync access handle", "category": "api" },
+          { "name": "Web Worker", "category": "platform" }
+        ],
+        "authors": [],
+        "claims": [
+          {
+            "statement": "Synchronous access handles, the fastest way to read and write OPFS files, cannot be used on the main thread.",
+            "type": "concern",
+            "concepts": ["Sync access handle", "OPFS"]
+          },
+          {
+            "statement": "OPFS lets an app read and write files in place without permission prompts, which suits database engines that need random access.",
+            "type": "benefit",
+            "concepts": ["OPFS"]
+          },
+          {
+            "statement": "Files in OPFS are private to the origin and are not visible in the user's file system.",
+            "type": "fact",
+            "concepts": ["OPFS"]
+          }
+        ],
+        "relatedConcepts": [
+          { "from": "OPFS", "to": "Sync access handle" },
+          { "from": "Sync access handle", "to": "Web Worker" }
+        ]
+      }
+    },
+    {
+      "url": "https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers",
+      "title": "Using Web Workers - Web APIs | MDN",
+      "clippedAt": "2026-11-14T10:20:00Z",
+      "source": "page",
+      "extraction": {
+        "summary": "A guide to running scripts in background threads with dedicated and shared workers and exchanging data with them through messages.",
+        "concepts": [
+          { "name": "Web Worker", "category": "platform" },
+          { "name": "Main thread", "category": "platform" },
+          { "name": "postMessage", "category": "api" }
+        ],
+        "authors": [],
+        "claims": [
+          {
+            "statement": "Running file and database work in a dedicated worker keeps the page responsive and gives access to APIs that are only allowed off the main thread.",
+            "type": "solution",
+            "concepts": ["Web Worker", "Main thread", "Sync access handle"]
+          },
+          {
+            "statement": "Workers cannot touch the DOM, so results must be sent back to the page with postMessage.",
+            "type": "concern",
+            "concepts": ["Web Worker", "postMessage"]
+          },
+          {
+            "statement": "Data passed with postMessage is copied with the structured clone algorithm unless it is transferred.",
+            "type": "fact",
+            "concepts": ["postMessage"]
+          }
+        ],
+        "relatedConcepts": [
+          { "from": "Web Worker", "to": "Main thread" },
+          { "from": "Web Worker", "to": "postMessage" }
+        ]
+      }
+    },
+    {
+      "url": "https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API",
+      "title": "Service Worker API - Web APIs | MDN",
+      "clippedAt": "2026-11-14T10:30:00Z",
+      "source": "page",
+      "extraction": {
+        "summary": "Overview of service workers, which sit between a web app and the network to intercept requests, cache resources and enable offline use.",
+        "concepts": [
+          { "name": "Service Worker", "category": "platform" },
+          { "name": "Offline support", "category": "capability" },
+          { "name": "Cache Storage", "category": "storage" }
+        ],
+        "authors": [],
+        "claims": [
+          {
+            "statement": "A service worker can answer requests from Cache Storage, so the app shell still loads when the network or the server is down.",
+            "type": "solution",
+            "concepts": ["Service Worker", "Offline support", "Cache Storage"]
+          },
+          {
+            "statement": "The browser stops idle service workers, so any state kept only in a service worker's memory is lost.",
+            "type": "concern",
+            "concepts": ["Service Worker"]
+          },
+          {
+            "statement": "Service workers run only on secure origins served over HTTPS or on localhost.",
+            "type": "fact",
+            "concepts": ["Service Worker"]
+          }
+        ],
+        "relatedConcepts": [
+          { "from": "Service Worker", "to": "Cache Storage" },
+          { "from": "Service Worker", "to": "Offline support" }
+        ]
+      }
+    },
+    {
+      "url": "https://jlongster.com/future-sql-web",
+      "title": "A future for SQL on the web",
+      "clippedAt": "2026-11-14T10:40:00Z",
+      "source": "page",
+      "extraction": {
+        "summary": "Introduces absurd-sql, which runs SQLite compiled to WebAssembly and persists it by storing database blocks in IndexedDB, and measures it against using IndexedDB directly.",
+        "concepts": [
+          { "name": "SQLite", "category": "database" },
+          { "name": "IndexedDB", "category": "storage" },
+          { "name": "WebAssembly", "category": "runtime" },
+          { "name": "absurd-sql", "category": "library" }
+        ],
+        "authors": ["James Long"],
+        "claims": [
+          {
+            "statement": "Doing many small reads and writes as separate IndexedDB transactions makes an app's data layer slow.",
+            "type": "concern",
+            "concepts": ["IndexedDB", "Transaction"]
+          },
+          {
+            "statement": "Before persistent backends existed, SQLite compiled to Wasm kept the whole database in memory and lost changes on reload unless the app saved it manually.",
+            "type": "concern",
+            "concepts": ["SQLite", "WebAssembly"]
+          },
+          {
+            "statement": "Treating IndexedDB as a block device for SQLite and batching block writes into few transactions is faster than using IndexedDB directly.",
+            "type": "solution",
+            "concepts": ["absurd-sql", "SQLite", "IndexedDB"]
+          }
+        ],
+        "relatedConcepts": [
+          { "from": "SQLite", "to": "WebAssembly" },
+          { "from": "absurd-sql", "to": "IndexedDB" },
+          { "from": "absurd-sql", "to": "SQLite" }
+        ]
+      }
+    },
+    {
+      "url": "https://developer.chrome.com/blog/sqlite-wasm-in-the-browser-backed-by-the-origin-private-file-system",
+      "title": "SQLite Wasm in the browser backed by the Origin Private File System",
+      "clippedAt": "2026-11-14T10:50:00Z",
+      "source": "page",
+      "extraction": {
+        "summary": "Announces the official SQLite build for WebAssembly and shows how to persist a database in the origin private file system from a worker.",
+        "concepts": [
+          { "name": "SQLite", "category": "database" },
+          { "name": "WebAssembly", "category": "runtime" },
+          { "name": "OPFS", "category": "storage" },
+          { "name": "Web Worker", "category": "platform" }
+        ],
+        "authors": ["Thomas Steiner"],
+        "claims": [
+          {
+            "statement": "The official SQLite Wasm build can store its database file in OPFS, so data persists across reloads without an IndexedDB layer in between.",
+            "type": "solution",
+            "concepts": ["SQLite", "OPFS", "IndexedDB"]
+          },
+          {
+            "statement": "The OPFS-backed database has to be opened from a worker because it relies on synchronous file access.",
+            "type": "fact",
+            "concepts": ["OPFS", "Web Worker", "Sync access handle"]
+          },
+          {
+            "statement": "Using the OPFS persistence requires the page to be cross-origin isolated with COOP and COEP headers.",
+            "type": "concern",
+            "concepts": ["OPFS", "Cross-origin isolation"]
+          }
+        ],
+        "relatedConcepts": [
+          { "from": "SQLite", "to": "OPFS" },
+          { "from": "SQLite", "to": "WebAssembly" }
+        ]
+      }
+    },
+    {
+      "url": "https://sqlite.org/wasm/doc/trunk/persistence.md",
+      "title": "Persistent Storage Options - SQLite Wasm",
+      "clippedAt": "2026-11-14T11:00:00Z",
+      "source": "page",
+      "extraction": {
+        "summary": "Compares the ways SQLite Wasm can persist databases in the browser, including the OPFS VFS and the OPFS SyncAccessHandle pool VFS, and their trade-offs.",
+        "concepts": [
+          { "name": "SQLite", "category": "database" },
+          { "name": "OPFS", "category": "storage" },
+          { "name": "VFS", "category": "database" },
+          { "name": "Cross-origin isolation", "category": "constraint" }
+        ],
+        "authors": [],
+        "claims": [
+          {
+            "statement": "An OPFS sync access handle locks its file, so only one connection at a time can use the database and other tabs get errors.",
+            "type": "concern",
+            "concepts": ["Sync access handle", "OPFS", "SQLite"]
+          },
+          {
+            "statement": "The SyncAccessHandle pool VFS works without COOP and COEP headers, at the cost of supporting only one connection.",
+            "type": "solution",
+            "concepts": ["VFS", "Cross-origin isolation", "OPFS"]
+          },
+          {
+            "statement": "A database file on OPFS is read page by page, so the dataset does not have to fit into WebAssembly memory at once.",
+            "type": "solution",
+            "concepts": ["SQLite", "OPFS", "WebAssembly memory"]
+          }
+        ],
+        "relatedConcepts": [{ "from": "SQLite", "to": "VFS" }, { "from": "VFS", "to": "OPFS" }]
+      }
+    },
+    {
+      "url": "https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API",
+      "title": "Web Locks API - Web APIs | MDN",
+      "clippedAt": "2026-11-14T11:10:00Z",
+      "source": "page",
+      "extraction": {
+        "summary": "Reference for the Web Locks API, which lets scripts in tabs and workers of the same origin acquire a named lock and coordinate work.",
+        "concepts": [
+          { "name": "Web Locks API", "category": "api" },
+          { "name": "Multiple tabs", "category": "constraint" },
+          { "name": "Web Worker", "category": "platform" }
+        ],
+        "authors": [],
+        "claims": [
+          {
+            "statement": "A named Web Lock lets tabs elect a single owner for a shared resource while other tabs wait in a queue until it is released.",
+            "type": "solution",
+            "concepts": ["Web Locks API", "Multiple tabs"]
+          },
+          {
+            "statement": "A lock is released automatically when the tab or worker that holds it goes away.",
+            "type": "fact",
+            "concepts": ["Web Locks API"]
+          }
+        ],
+        "relatedConcepts": [{ "from": "Web Locks API", "to": "Multiple tabs" }]
+      }
+    },
+    {
+      "url": "https://v8.dev/blog/4gb-wasm-memory",
+      "title": "Up to 4GB of memory in WebAssembly",
+      "clippedAt": "2026-11-14T11:20:00Z",
+      "source": "page",
+      "extraction": {
+        "summary": "Explains how V8 raised the maximum WebAssembly memory from 2GB to 4GB, the limit of 32-bit addressing, and what toolchains must do to use it.",
+        "concepts": [
+          { "name": "WebAssembly", "category": "runtime" },
+          { "name": "WebAssembly memory", "category": "constraint" },
+          { "name": "V8", "category": "runtime" }
+        ],
+        "authors": [],
+        "claims": [
+          {
+            "statement": "With 32-bit addressing a WebAssembly instance cannot use more than 4GB of linear memory, which caps in-memory datasets.",
+            "type": "concern",
+            "concepts": ["WebAssembly memory", "WebAssembly"]
+          },
+          {
+            "statement": "Linear memory can grow while the module runs but never shrinks.",
+            "type": "fact",
+            "concepts": ["WebAssembly memory"]
+          }
+        ],
+        "relatedConcepts": [
+          { "from": "WebAssembly", "to": "WebAssembly memory" },
+          { "from": "WebAssembly", "to": "V8" }
+        ]
+      }
+    }
+  ],
+  "addresses": [
+    {
+      "solution": {
+        "page": "https://crdt.tech/",
+        "statement": "CRDTs merge concurrent updates automatically, so every replica converges to the same state without a central server deciding the order."
+      },
+      "concern": {
+        "page": "https://www.inkandswitch.com/local-first/",
+        "statement": "When people edit the same data offline on different devices, the edits must be merged later without losing anyone's work."
+      }
+    },
+    {
+      "solution": {
+        "page": "https://docs.yjs.dev/",
+        "statement": "Yjs shared types let several users edit the same document concurrently and merge their changes automatically."
+      },
+      "concern": {
+        "page": "https://www.inkandswitch.com/local-first/",
+        "statement": "When people edit the same data offline on different devices, the edits must be merged later without losing anyone's work."
+      }
+    },
+    {
+      "solution": {
+        "page": "https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API",
+        "statement": "A service worker can answer requests from Cache Storage, so the app shell still loads when the network or the server is down."
+      },
+      "concern": {
+        "page": "https://www.inkandswitch.com/local-first/",
+        "statement": "Cloud apps stop working when the server is unreachable or the vendor shuts the service down."
+      }
+    },
+    {
+      "solution": {
+        "page": "https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API",
+        "statement": "IndexedDB is asynchronous and is available both in windows and in workers, so storage calls do not block page rendering."
+      },
+      "concern": {
+        "page": "https://web.dev/articles/storage-for-the-web",
+        "statement": "localStorage is synchronous, blocks the main thread while it reads or writes, and cannot be used from workers."
+      }
+    },
+    {
+      "solution": {
+        "page": "https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API",
+        "statement": "Because IndexedDB is available inside service workers, a service worker can save its state there and restore it after it restarts."
+      },
+      "concern": {
+        "page": "https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API",
+        "statement": "The browser stops idle service workers, so any state kept only in a service worker's memory is lost."
+      }
+    },
+    {
+      "solution": {
+        "page": "https://developer.mozilla.org/en-US/docs/Web/API/StorageManager/persist",
+        "statement": "Calling navigator.storage.persist() asks the browser to exclude the origin's data from automatic eviction."
+      },
+      "concern": {
+        "page": "https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria",
+        "statement": "Data in best-effort storage can be evicted by the browser without asking the user when the device runs low on disk space."
+      }
+    },
+    {
+      "solution": {
+        "page": "https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers",
+        "statement": "Running file and database work in a dedicated worker keeps the page responsive and gives access to APIs that are only allowed off the main thread."
+      },
+      "concern": {
+        "page": "https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system",
+        "statement": "Synchronous access handles, the fastest way to read and write OPFS files, cannot be used on the main thread."
+      }
+    },
+    {
+      "solution": {
+        "page": "https://developer.chrome.com/blog/sqlite-wasm-in-the-browser-backed-by-the-origin-private-file-system",
+        "statement": "The official SQLite Wasm build can store its database file in OPFS, so data persists across reloads without an IndexedDB layer in between."
+      },
+      "concern": {
+        "page": "https://jlongster.com/future-sql-web",
+        "statement": "Doing many small reads and writes as separate IndexedDB transactions makes an app's data layer slow."
+      }
+    },
+    {
+      "solution": {
+        "page": "https://developer.chrome.com/blog/sqlite-wasm-in-the-browser-backed-by-the-origin-private-file-system",
+        "statement": "The official SQLite Wasm build can store its database file in OPFS, so data persists across reloads without an IndexedDB layer in between."
+      },
+      "concern": {
+        "page": "https://jlongster.com/future-sql-web",
+        "statement": "Before persistent backends existed, SQLite compiled to Wasm kept the whole database in memory and lost changes on reload unless the app saved it manually."
+      }
+    },
+    {
+      "solution": {
+        "page": "https://sqlite.org/wasm/doc/trunk/persistence.md",
+        "statement": "The SyncAccessHandle pool VFS works without COOP and COEP headers, at the cost of supporting only one connection."
+      },
+      "concern": {
+        "page": "https://developer.chrome.com/blog/sqlite-wasm-in-the-browser-backed-by-the-origin-private-file-system",
+        "statement": "Using the OPFS persistence requires the page to be cross-origin isolated with COOP and COEP headers."
+      }
+    },
+    {
+      "solution": {
+        "page": "https://sqlite.org/wasm/doc/trunk/persistence.md",
+        "statement": "A database file on OPFS is read page by page, so the dataset does not have to fit into WebAssembly memory at once."
+      },
+      "concern": {
+        "page": "https://v8.dev/blog/4gb-wasm-memory",
+        "statement": "With 32-bit addressing a WebAssembly instance cannot use more than 4GB of linear memory, which caps in-memory datasets."
+      }
+    },
+    {
+      "solution": {
+        "page": "https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API",
+        "statement": "A named Web Lock lets tabs elect a single owner for a shared resource while other tabs wait in a queue until it is released."
+      },
+      "concern": {
+        "page": "https://sqlite.org/wasm/doc/trunk/persistence.md",
+        "statement": "An OPFS sync access handle locks its file, so only one connection at a time can use the database and other tabs get errors."
+      }
+    }
+  ]
+}
