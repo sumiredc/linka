@@ -1,6 +1,6 @@
 # Linka PRD — Chrome 上で育てるローカル知識グラフ
 
-Linka は、開発者が技術調査で読んだページを Chrome のサイドパネルからクリップし、端末内の知識グラフ（Relate Wasm）として残す Chrome 拡張機能である。この文書は Relate by Neo4j Hackathon への応募作の要件の正であり、`draft.md`（Gemini と作ったたたき台）より優先する。
+Linka は、開発者が技術調査で読んだページを Chrome のサイドパネルからクリップし、端末内の知識グラフ（Relate Wasm）として残す Chrome 拡張機能である。この文書は Relate by Neo4j Hackathon への応募作の要件の正である。
 
 - 一行ピッチ（英語、提出用）：*Clip what you read in Chrome into a local knowledge graph — then hand that context to your coding agent.*
 - 提出締切：2026-12-11 18:00 PST（日本時間 2026-12-12 11:00）。自分の締切は 12-10 とする
@@ -79,7 +79,7 @@ Linka は、読んだページから概念・主張（課題・解決策など�
 
 ## 5. 扱う概念（グラフモデル）
 
-draft のモデルを引き継ぎ、重複と再クリップの扱いを足す。
+ノードと関係は次のとおり。重複と再クリップの扱いも決めておく。
 
 ```mermaid
 flowchart LR
