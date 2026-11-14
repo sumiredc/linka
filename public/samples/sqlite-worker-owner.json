@@ -1,0 +1,60 @@
+{
+  "path": "samples/sqlite-worker-owner.html",
+  "title": "Sharing one SQLite database across tabs",
+  "extraction": {
+    "summary": "Shows how to share an OPFS-backed SQLite Wasm database between tabs by letting one dedicated worker own the file and electing its tab with a Web Lock.",
+    "concepts": [
+      { "name": "SQLite", "category": "database" },
+      { "name": "OPFS", "category": "storage" },
+      { "name": "Sync access handle", "category": "api" },
+      { "name": "Web Worker", "category": "platform" },
+      { "name": "Web Locks API", "category": "api" },
+      { "name": "Multiple tabs", "category": "constraint" },
+      { "name": "postMessage", "category": "api" }
+    ],
+    "authors": [],
+    "claims": [
+      {
+        "statement": "A synchronous access handle locks the database file, so a second tab that opens the same SQLite database fails.",
+        "type": "concern",
+        "concepts": ["Sync access handle", "SQLite", "Multiple tabs"]
+      },
+      {
+        "statement": "Open the database in one dedicated worker and send every tab's queries to it as messages, using a named Web Lock to choose the tab that runs the worker.",
+        "type": "solution",
+        "concepts": ["Web Worker", "Web Locks API", "SQLite"]
+      },
+      {
+        "statement": "Routing queries through messages copies every result with structured clone, which adds overhead when there are many small queries.",
+        "type": "concern",
+        "concepts": ["postMessage"]
+      }
+    ],
+    "relatedConcepts": [
+      { "from": "Web Locks API", "to": "Web Worker" },
+      { "from": "SQLite", "to": "Sync access handle" }
+    ]
+  },
+  "addresses": [
+    {
+      "solution": {
+        "page": "samples/sqlite-worker-owner.html",
+        "statement": "Open the database in one dedicated worker and send every tab's queries to it as messages, using a named Web Lock to choose the tab that runs the worker."
+      },
+      "concern": {
+        "page": "https://sqlite.org/wasm/doc/trunk/persistence.md",
+        "statement": "An OPFS sync access handle locks its file, so only one connection at a time can use the database and other tabs get errors."
+      }
+    },
+    {
+      "solution": {
+        "page": "https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API",
+        "statement": "A named Web Lock lets tabs elect a single owner for a shared resource while other tabs wait in a queue until it is released."
+      },
+      "concern": {
+        "page": "samples/sqlite-worker-owner.html",
+        "statement": "A synchronous access handle locks the database file, so a second tab that opens the same SQLite database fails."
+      }
+    }
+  ]
+}
