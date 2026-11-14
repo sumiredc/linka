@@ -120,6 +120,31 @@ describe("detectWrite: procedures", () => {
       name: "db.checkpoint",
     });
   });
+
+  it("rejects a procedure whose whole name is in backticks", () => {
+    expect(detectWrite("CALL `db.createLabel`('Evil')")).toEqual({
+      kind: "procedure",
+      name: "db.createLabel",
+    });
+  });
+
+  it("rejects a procedure whose name parts are each in backticks", () => {
+    expect(detectWrite("CALL `db`.`createLabel`('Evil')")).toEqual({
+      kind: "procedure",
+      name: "db.createLabel",
+    });
+  });
+
+  it("rejects a procedure whose name mixes plain and backtick parts", () => {
+    expect(detectWrite("CALL db.`createLabel`('Evil')")).toEqual({
+      kind: "procedure",
+      name: "db.createLabel",
+    });
+  });
+
+  it("reads a doubled backtick in a backtick name as one backtick", () => {
+    expect(detectWrite("CALL `a``b`()")).toEqual({ kind: "procedure", name: "a`b" });
+  });
 });
 
 describe("detectWrite: unterminated input", () => {
@@ -142,6 +167,13 @@ describe("detectWrite against Relate", () => {
     const query = "INSERT (:Page {url: 'x'})";
     run(db, query);
     expect(run(db, "MATCH (n) RETURN count(n) AS n").rows).toEqual([{ n: 1 }]);
+    expect(detectWrite(query)).not.toBeNull();
+  });
+
+  it("covers backtick-quoted procedure names because Relate runs them", () => {
+    const db = openMemoryDb();
+    const query = "CALL `db.createLabel`('Evil')";
+    expect(run(db, query).error).toBeNull();
     expect(detectWrite(query)).not.toBeNull();
   });
 });
