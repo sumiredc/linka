@@ -163,7 +163,9 @@ export function buildClipStatements(input: Clip): CypherStatement[] {
 /**
  * 再クリップの前に流す文。そのページ全体から抽出した Claim（`page` と `sample`）と、
  * それに付いた ABOUT・ADDRESSES、ページの MENTIONS・AUTHORED_BY を消す。
- * 選択範囲から足した Claim と、他のページも参照しうる Concept・Person は残す。
+ * 選択範囲から足した Claim と、他のページも参照しうる Concept・Person は残し、
+ * 残した Claim が ABOUT で指す Concept への MENTIONS は張り直す。
+ * Concept 同士の RELATED_TO はページをまたいで積み上がるもので、ページの持ち物ではないので消さない。
  */
 export function buildReclipStatements(pageUrl: string): CypherStatement[] {
   const url = normalizeUrl(pageUrl);
@@ -178,6 +180,13 @@ export function buildReclipStatements(pageUrl: string): CypherStatement[] {
     },
     {
       query: "MATCH (p:Page {url: $url})-[r:MENTIONS|AUTHORED_BY]->()\nDELETE r",
+      params: { url },
+    },
+    {
+      query: [
+        "MATCH (p:Page {url: $url})-[:ASSERTS]->(:Claim {source: 'selection'})-[:ABOUT]->(k:Concept)",
+        "MERGE (p)-[:MENTIONS]->(k)",
+      ].join("\n"),
       params: { url },
     },
   ];
