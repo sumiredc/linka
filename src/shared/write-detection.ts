@@ -43,21 +43,42 @@ export type WriteDetection =
   /** 閉じていない文字列・コメント・名前。どこまでが字句か決められないので書き込みとみなす */
   | { kind: "unterminated" };
 
-type Token = { type: "word"; text: string } | { type: "punct"; text: string } | { type: "other" };
+type Token =
+  | { type: "word"; text: string }
+  /** バッククォートの名前。text は `` を ` に戻した中身 */
+  | { type: "quoted"; text: string }
+  | { type: "punct"; text: string }
+  | { type: "other" };
 
 const WORD_CHAR = /[\p{L}\p{N}_]/u;
 
-// バッククォートの名前の `` は「閉じてすぐ開く」と読んでも字句の切れ目は同じなので、特別扱いしない
-function skipQuoted(source: string, start: number, quote: string): number {
+function skipString(source: string, start: number, quote: string): number {
   for (let i = start + 1; i < source.length; i++) {
     const char = source[i];
-    if (char === "\\" && quote !== "`") {
+    if (char === "\\") {
       i++;
     } else if (char === quote) {
       return i + 1;
     }
   }
   return -1;
+}
+
+/** バッククォートの名前を読み、中身と次の位置を返す。閉じていなければ null */
+function readQuotedName(source: string, start: number): { text: string; end: number } | null {
+  let text = "";
+  for (let i = start + 1; i < source.length; i++) {
+    const char = source[i] as string;
+    if (char !== "`") {
+      text += char;
+    } else if (source[i + 1] === "`") {
+      text += "`";
+      i++;
+    } else {
+      return { text, end: i + 1 };
+    }
+  }
+  return null;
 }
 
 function tokenize(source: string): Token[] | null {
@@ -75,11 +96,16 @@ function tokenize(source: string): Token[] | null {
       const end = source.indexOf("*/", i + 2);
       if (end === -1) return null;
       i = end + 2;
-    } else if (char === "'" || char === '"' || char === "`") {
-      const end = skipQuoted(source, i, char);
+    } else if (char === "'" || char === '"') {
+      const end = skipString(source, i, char);
       if (end === -1) return null;
       tokens.push({ type: "other" });
       i = end;
+    } else if (char === "`") {
+      const name = readQuotedName(source, i);
+      if (name === null) return null;
+      tokens.push({ type: "quoted", text: name.text });
+      i = name.end;
     } else if (WORD_CHAR.test(char)) {
       let end = i + 1;
       while (end < source.length && WORD_CHAR.test(source[end] as string)) end++;
@@ -108,12 +134,15 @@ function isName(tokens: readonly Token[], index: number): boolean {
   );
 }
 
-/** `CALL` の後ろの `a.b.c` を読む。`CALL {` と `CALL (x) {` の副問い合わせなら null */
+/**
+ * `CALL` の後ろの手続き名を読む。`CALL {` と `CALL (x) {` の副問い合わせなら null。
+ * `` `db.createLabel` `` や `` `db`.`createLabel` `` のようにバッククォートで書かれた部分も名前として読む
+ */
 function procedureName(tokens: readonly Token[], callIndex: number): string | null {
   const parts: string[] = [];
   for (let i = callIndex + 1; i < tokens.length; i += 2) {
     const token = tokens[i];
-    if (token?.type !== "word") break;
+    if (token?.type !== "word" && token?.type !== "quoted") break;
     parts.push(token.text);
     if (!isPunct(tokens[i + 1], ".")) break;
   }
