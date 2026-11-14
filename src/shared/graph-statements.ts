@@ -15,9 +15,13 @@ type ConceptRow = {
 class ConceptCollector {
   readonly #rows = new Map<string, ConceptRow>();
 
-  /** 同じ key の 2 回目以降は無視する。分類のある `concepts` を先に足すこと */
-  add(name: string, category: string | null): string {
+  /**
+   * 同じ key の 2 回目以降は無視する。分類のある `concepts` を先に足すこと。
+   * `-` や空白だけの名前は key が空になるので足さずに null を返す（空の key に寄せ集めないため）
+   */
+  add(name: string, category: string | null): string | null {
     const key = normalizeConceptKey(name);
+    if (key === "") return null;
     if (!this.#rows.has(key)) this.#rows.set(key, { key, name: name.trim(), category });
     return key;
   }
@@ -51,7 +55,7 @@ export function buildClipStatements(clip: Clip): CypherStatement[] {
       id: claimId(url, claim.statement),
       statement: normalizeStatement(claim.statement),
       type: claim.type,
-      conceptKeys: claim.concepts.map((name) => concepts.add(name, null)),
+      conceptKeys: claim.concepts.flatMap((name) => concepts.add(name, null) ?? []),
     })),
     (claim) => claim.id,
   );
@@ -61,10 +65,11 @@ export function buildClipStatements(clip: Clip): CypherStatement[] {
   );
   // RELATED_TO は向きを持たない関係として扱い、key の小さい方から張って重複を防ぐ
   const related = uniqueBy(
-    extraction.relatedConcepts
-      .map(({ from, to }) => [concepts.add(from, null), concepts.add(to, null)].sort())
-      .filter(([from, to]) => from !== to)
-      .map(([from, to]) => ({ from: from as string, to: to as string })),
+    extraction.relatedConcepts.flatMap(({ from, to }) => {
+      const [a, b] = [concepts.add(from, null), concepts.add(to, null)];
+      if (a === null || b === null || a === b) return [];
+      return [a < b ? { from: a, to: b } : { from: b, to: a }];
+    }),
     (link) => `${link.from}\n${link.to}`,
   );
   const authors = [...new Set(extraction.authors.map(normalizePersonName))].filter(

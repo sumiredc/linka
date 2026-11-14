@@ -201,6 +201,20 @@ describe("buildClipStatements on Relate", () => {
     expect(scalar(db, "MATCH ()-[r:RELATED_TO]->() RETURN count(r)")).toBe(0);
   });
 
+  it("skips concept names that normalize to an empty key instead of merging them into one", () => {
+    const db = openMemoryDb();
+    const c = clip(OPFS_URL, "page", {
+      concepts: [
+        { name: "-", category: "misc" },
+        { name: "OPFS", category: "storage" },
+      ],
+      claims: [{ statement: "S.", type: "fact", concepts: ["—", "OPFS"] }],
+      relatedConcepts: [{ from: "_", to: "OPFS" }],
+    });
+    runStatements(db, buildClipStatements(c));
+    expect(scalar(db, "MATCH (k:Concept) RETURN collect(k.key) AS keys")).toEqual(["opfs"]);
+  });
+
   it("does not overwrite the page summary when clipping a selection of a clipped page", () => {
     const db = openMemoryDb();
     runStatements(db, buildClipStatements(wasmClip));
