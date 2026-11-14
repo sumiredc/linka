@@ -13,6 +13,26 @@ export interface CypherStatement {
 }
 
 const SIMPLE_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+
+/**
+ * 対になっていないサロゲートを U+FFFD に置き換える（String.prototype.toWellFormed と同じ。
+ * tsconfig の lib を es2024 に上げずに使うため自前で持つ）。埋め込みとパラメータで値を揃えるために使う
+ */
+export function toWellFormed(text: string): string {
+  return text.replace(LONE_SURROGATE, "\uFFFD");
+}
+
+/** 値の中の文字列（マップのキーも）をすべて {@link toWellFormed} にかける */
+export function wellFormedValue<T extends CypherValue>(value: T): T;
+export function wellFormedValue(value: CypherValue): CypherValue {
+  if (typeof value === "string") return toWellFormed(value);
+  if (value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map(wellFormedValue);
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [toWellFormed(key), wellFormedValue(item)]),
+  );
+}
 
 // Relate 1.0.1 は \n と \t は解釈するが、\r・\b・\f は解釈せずバックスラッシュごと残す。
 // そのため \n・\t 以外の制御文字（C0・DEL・C1）と行区切りはすべて \uXXXX で書く
@@ -32,11 +52,11 @@ function escapeStringChar(char: string): string {
 }
 
 function quoteString(value: string): string {
-  return `'${value.replace(/[\\'\p{Cc}\u2028\u2029]/gu, escapeStringChar)}'`;
+  return `'${toWellFormed(value).replace(/[\\'\p{Cc}\u2028\u2029]/gu, escapeStringChar)}'`;
 }
 
 function quoteMapKey(key: string): string {
-  return SIMPLE_IDENTIFIER.test(key) ? key : `\`${key.replace(/`/g, "``")}\``;
+  return SIMPLE_IDENTIFIER.test(key) ? key : `\`${toWellFormed(key).replace(/`/g, "``")}\``;
 }
 
 /** 値を Cypher のリテラルにする。パラメータで渡したときと同じ値として読み戻される。 */

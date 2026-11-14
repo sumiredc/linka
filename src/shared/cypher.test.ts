@@ -31,6 +31,14 @@ describe("toCypherLiteral", () => {
     expect(toCypherLiteral("a\u0000b\u001fc")).toBe("'a\\u0000b\\u001fc'");
   });
 
+  it("replaces a lone surrogate with U+FFFD", () => {
+    expect(toCypherLiteral("a\uD800b\uDC00c")).toBe("'a\uFFFDb\uFFFDc'");
+  });
+
+  it("keeps a valid surrogate pair", () => {
+    expect(toCypherLiteral("\uD83D\uDE00")).toBe("'\uD83D\uDE00'");
+  });
+
   it("writes integers and floats as numbers", () => {
     expect(toCypherLiteral(42)).toBe("42");
     expect(toCypherLiteral(-1.5)).toBe("-1.5");
