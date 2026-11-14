@@ -1,5 +1,5 @@
 // DB の唯一の持ち主。画面から直接届いた依頼を Relate の worker に渡し、DB の変化を全画面に知らせる
-import { type DbResponse, isMessageFor, type RuntimeMessage } from "../shared/messages";
+import { type DbResponse, failure, isMessageFor, type RuntimeMessage } from "../shared/messages";
 import { DbClient } from "./db-client";
 import type { WorkerResponse } from "./worker-protocol";
 
@@ -18,6 +18,8 @@ const client = new DbClient({
       event.preventDefault();
       onError(event.message || "the database worker crashed");
     };
+    // 返事を受け取れないと、待っている依頼は時間切れまで終わらないので、落ちたものとして扱う
+    worker.onmessageerror = () => onError("could not read a message from the database worker");
     return { post: (request) => worker.postMessage(request), terminate: () => worker.terminate() };
   },
   onNotify: (notification) => {
@@ -30,7 +32,11 @@ const client = new DbClient({
 chrome.runtime.onMessage.addListener(
   (message: unknown, _sender, sendResponse: (response: DbResponse) => void) => {
     if (!isMessageFor(message, "offscreen")) return false;
-    client.request(message.request).then(sendResponse);
+    client
+      .request(message.request)
+      .then(sendResponse, (error: unknown) =>
+        sendResponse(failure("exception", error instanceof Error ? error.message : String(error))),
+      );
     return true;
   },
 );
