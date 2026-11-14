@@ -1,4 +1,4 @@
-// DB の唯一の持ち主。service worker から取り次がれた依頼を Relate の worker に渡す
+// DB の唯一の持ち主。画面から直接届いた依頼を Relate の worker に渡し、DB の変化を全画面に知らせる
 import { type DbResponse, isMessageFor, type RuntimeMessage } from "../shared/messages";
 import { DbClient } from "./db-client";
 import type { WorkerResponse } from "./worker-protocol";
@@ -21,8 +21,8 @@ const client = new DbClient({
     return { post: (request) => worker.postMessage(request), terminate: () => worker.terminate() };
   },
   onNotify: (notification) => {
-    const message: RuntimeMessage = { target: "background", type: "notify", notification };
-    // service worker が受け取らなかったときは、届ける相手がいないだけなので捨てる
+    const message: RuntimeMessage = { target: "ui", type: "notify", notification };
+    // 開いている画面が無ければ受け手がいないだけなので捨てる
     chrome.runtime.sendMessage(message).catch(() => {});
   },
 });

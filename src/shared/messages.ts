@@ -1,4 +1,5 @@
-// 画面・service worker・offscreen document の間で chrome.runtime を通して送るメッセージ
+// 画面・service worker・offscreen document の間で chrome.runtime を通して送るメッセージ。
+// 長い依頼が service worker の休止で返事を失わないよう、DB への依頼と通知は service worker を通さない
 
 export type CypherParams = Record<string, unknown>;
 
@@ -32,8 +33,8 @@ export type DbFailureKind =
   /** 前の依頼の時間切れや trap で worker を作り直すため、実行せずに打ち切った */
   | "restarting"
   | "unavailable"
-  /** service worker から offscreen document に届かなかった */
-  | "relay";
+  /** offscreen document を用意できなかった、または依頼が届かなかった */
+  | "unreachable";
 
 export type DbFailure = { ok: false; error: { kind: DbFailureKind; message: string } };
 
@@ -50,10 +51,14 @@ export type DbNotification =
   | { type: "storageChanged"; storage: StorageState };
 
 export type RuntimeMessage =
-  | { target: "background"; type: "db"; request: DbRequest }
+  /** service worker に offscreen document を用意させる。返事は `EnsureResponse` */
+  | { target: "background"; type: "ensureOffscreen" }
+  /** 返事は `DbResponse` */
   | { target: "offscreen"; type: "db"; request: DbRequest }
-  | { target: "background"; type: "notify"; notification: DbNotification }
+  /** offscreen document から拡張機能のすべてのページへ */
   | { target: "ui"; type: "notify"; notification: DbNotification };
+
+export type EnsureResponse = { ok: true } | DbFailure;
 
 export type MessageTarget = RuntimeMessage["target"];
 
