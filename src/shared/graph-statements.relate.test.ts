@@ -314,15 +314,26 @@ describe("buildReclipStatements on Relate", () => {
     expect(scalar(db, "MATCH ()-[r:ADDRESSES]->() RETURN count(r)")).toBe(0);
   });
 
-  it("removes MENTIONS and AUTHORED_BY that the new extraction no longer has", () => {
-    const db = seededDb();
-    reclip(db);
+  function pageLinks(db: RelateDb): unknown[] {
     const { rows } = run(
       db,
       "MATCH (:Page {url: $url})-[r:MENTIONS|AUTHORED_BY]->(n) RETURN type(r) AS type, coalesce(n.key, n.name) AS target",
       { url: WASM_URL },
     );
-    expect(rows).toEqual([{ type: "MENTIONS", target: "webassembly" }]);
+    return rows.map((row) => `${row.type} ${row.target}`).sort();
+  }
+
+  it("removes MENTIONS and AUTHORED_BY that neither the new extraction nor a kept claim has", () => {
+    const db = seededDb();
+    reclip(db);
+    expect(pageLinks(db)).not.toContain("MENTIONS memorylimit");
+    expect(pageLinks(db)).not.toContain("AUTHORED_BY Lin Clark");
+  });
+
+  it("keeps MENTIONS of the concepts that a kept selection claim is ABOUT", () => {
+    const db = seededDb();
+    reclip(db);
+    expect(pageLinks(db)).toEqual(["MENTIONS memory64", "MENTIONS webassembly"]);
   });
 
   it("does not touch claims of other pages", () => {
