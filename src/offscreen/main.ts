@@ -1,5 +1,11 @@
 // DB の唯一の持ち主。画面から直接届いた依頼を Relate の worker に渡し、DB の変化を全画面に知らせる
-import { type DbResponse, failure, isMessageFor, type RuntimeMessage } from "../shared/messages";
+import {
+  type DbResponse,
+  failure,
+  isFromExtensionPage,
+  isMessageFor,
+  type RuntimeMessage,
+} from "../shared/messages";
 import { DbClient } from "./db-client";
 import type { WorkerResponse } from "./worker-protocol";
 
@@ -30,8 +36,9 @@ const client = new DbClient({
 });
 
 chrome.runtime.onMessage.addListener(
-  (message: unknown, _sender, sendResponse: (response: DbResponse) => void) => {
+  (message: unknown, sender, sendResponse: (response: DbResponse) => void) => {
     if (!isMessageFor(message, "offscreen")) return false;
+    if (!isFromExtensionPage(sender, chrome.runtime.getURL(""))) return false;
     client
       .request(message.request)
       .then(sendResponse, (error: unknown) =>

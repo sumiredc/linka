@@ -1,6 +1,11 @@
 // service worker は dedicated worker を作れないので DB を持たず、offscreen document を 1 つだけ用意する。
 // 依頼は取り次がない。長い依頼の返事を待つ間に service worker が休止すると、返事が失われるため
-import { type EnsureResponse, failure, isMessageFor } from "../shared/messages";
+import {
+  type EnsureResponse,
+  failure,
+  isFromExtensionPage,
+  isMessageFor,
+} from "../shared/messages";
 import { createOffscreenEnsurer } from "./offscreen";
 
 const ensureOffscreen = createOffscreenEnsurer({
@@ -19,8 +24,9 @@ const ensureOffscreen = createOffscreenEnsurer({
 });
 
 chrome.runtime.onMessage.addListener(
-  (message: unknown, _sender, sendResponse: (response: EnsureResponse) => void) => {
+  (message: unknown, sender, sendResponse: (response: EnsureResponse) => void) => {
     if (!isMessageFor(message, "background")) return false;
+    if (!isFromExtensionPage(sender, chrome.runtime.getURL(""))) return false;
     ensureOffscreen().then(
       () => sendResponse({ ok: true }),
       (error: unknown) =>
