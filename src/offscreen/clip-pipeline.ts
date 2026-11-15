@@ -11,16 +11,22 @@ import type {
   ClipResult,
   ClipStage,
   ClipTarget,
+  ConnectionsOutcome,
+  NewConnection,
 } from "../shared/clip-status";
 import { pageUrlOf } from "../shared/clip-status";
 import type { CypherStatement } from "../shared/cypher";
 import type { Clip } from "../shared/extraction";
 import {
   type AddressesLink,
+  buildAddressesCandidatesStatement,
   buildAddressesStatement,
   buildClipStatements,
+  buildConnectionsStatement,
   buildReclipStatements,
+  buildRemoveAddressesStatement,
   clipRows,
+  toAddressesCandidates,
 } from "../shared/graph-statements";
 import { type DbResponse, failure, type RelateResult } from "../shared/messages";
 import type { LanguageModelStatic } from "../shared/prompt-api";
@@ -28,6 +34,7 @@ import { loadSample } from "../shared/sample-page";
 import { normalizeUrl } from "../shared/url";
 import { buildUndoStatements, type ClipDb, readSnapshot, type UndoJournal } from "./clip-undo";
 import { type ExtractOptions, extractPage } from "./extract";
+import { type JudgeOptions, judgeCandidates } from "./judge";
 
 /** 取り消しの文はどれも何度流しても同じ結果になるので、DB の作り直しなどで失敗しても流し直す */
 const UNDO_ATTEMPTS = 3;
@@ -42,8 +49,13 @@ export type ClipPipelineOptions = {
   now?(): string;
   fetchFile?(url: string): Promise<Response>;
   extract?: Omit<ExtractOptions, "onPart">;
+  judge?: Omit<JudgeOptions, "onPair">;
 };
 
+/**
+ * `addresses` はサンプルの事前抽出データの組で、記憶の書き込みと一緒に張る。
+ * null なら、書き込みのあとで Nano につながりを判定させる（UC2）
+ */
 type Prepared = { clip: Clip; addresses: AddressesLink[] | null };
 
 class StepFailure extends Error {
@@ -154,7 +166,45 @@ export class ClipPipeline {
       throw error;
     }
     this.#setStage(target, { kind: "writing" });
-    return this.#write(prepared);
+    const written = await this.#write(prepared);
+    if (!written.ok || prepared.addresses !== null) return written;
+    // UC1 の書き込みが済んでから判定する。ここで何が起きても、UC1 で入れた内容は戻さない
+    const connections = await this.#connect(target, written.summary.url);
+    return { ok: true, summary: { ...written.summary, connections } };
+  }
+
+  /**
+   * そのページの Claim と別のページの Claim から組を集めて Nano に判定させ、解決すると答えた組に ADDRESSES を張る（UC2）。
+   * 判定のどれかが失敗したら何も張らない
+   */
+  async #connect(target: ClipTarget, url: string): Promise<ConnectionsOutcome> {
+    try {
+      const found = await this.#db.execute(buildAddressesCandidatesStatement(url));
+      if (!found.ok) return notJudged(`could not look for candidates: ${dbError(found)}`);
+      const candidates = toAddressesCandidates(found.value.rows);
+      if (candidates.length === 0) return { kind: "judged", links: [] };
+      const judged = await judgeCandidates(this.options.api(), candidates, {
+        ...this.options.judge,
+        onPair: (pair, pairs) => this.#setStage(target, { kind: "connecting", pair, pairs }),
+      });
+      if (!judged.ok) return notJudged(judged.error.message);
+      if (judged.links.length === 0) return { kind: "judged", links: [] };
+      const written = await this.#db.execute(buildAddressesStatement(judged.links));
+      if (!written.ok) {
+        // 張りかけた分を消す。消せなくても、残るのは Nano が解決すると答えた組だけ
+        await this.#db.execute(buildRemoveAddressesStatement(judged.links));
+        return notJudged(`could not save the connections: ${dbError(written)}`);
+      }
+      const linked = new Set(judged.links.map((link) => `${link.solution}\n${link.concern}`));
+      return {
+        kind: "judged",
+        links: candidates
+          .filter((pair) => linked.has(`${pair.solution.id}\n${pair.concern.id}`))
+          .map(({ solution, concern }) => ({ solution, concern })),
+      };
+    } catch (error) {
+      return notJudged(messageOf(error));
+    }
   }
 
   async #prepare(target: ClipTarget, body: ClipBody): Promise<Prepared> {
@@ -240,11 +290,12 @@ export class ClipPipeline {
         const response = await this.#db.execute(statement);
         if (!response.ok) return await this.#undo(undo, dbError(response));
       }
-      let connections: number | null = null;
+      // サンプル以外では、#run が書き込みのあとの判定（UC2）の結果で置き換える
+      let connections: ConnectionsOutcome = notJudged("not judged yet");
       if (addresses) {
         const response = await this.#db.execute(buildAddressesStatement(addresses));
         if (!response.ok) return await this.#undo(undo, dbError(response));
-        connections = response.value.stats.relationships_created ?? 0;
+        connections = await this.#readConnections(addresses);
       }
       this.options.journal.clear();
       return {
@@ -262,6 +313,17 @@ export class ClipPipeline {
     } finally {
       this.#writing = false;
     }
+  }
+
+  /** 与えた組のうち ADDRESSES が張られたものを、両端の文とページとともに読む */
+  async #readConnections(links: AddressesLink[]): Promise<ConnectionsOutcome> {
+    if (links.length === 0) return { kind: "judged", links: [] };
+    const response = await this.#db.execute(buildConnectionsStatement(links));
+    if (!response.ok) return notJudged(`could not read the connections: ${dbError(response)}`);
+    const read: NewConnection[] = toAddressesCandidates(response.value.rows).map(
+      ({ solution, concern }) => ({ solution, concern }),
+    );
+    return { kind: "judged", links: read };
   }
 
   async #undo(statements: CypherStatement[], reason: string): Promise<ClipResult> {
@@ -335,6 +397,10 @@ export class ClipPipeline {
       // 通知を受け取る側の失敗で記憶を止めない
     }
   }
+}
+
+function notJudged(reason: string): ConnectionsOutcome {
+  return { kind: "notJudged", reason };
 }
 
 function writeFailure(message: string, restored: boolean): ClipResult {

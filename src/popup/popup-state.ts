@@ -195,14 +195,17 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
 
 export type StepState = "done" | "now" | "todo";
 
-/** 進み具合の一覧。同梱サンプルは抽出せず、事前抽出データを読む */
+/**
+ * 進み具合の一覧。同梱サンプルは抽出せず、事前抽出データを読む。
+ * つながりの判定（UC2）も、サンプルでは事前抽出データの組を張るだけなので出さない
+ */
 export function progressSteps(
   stage: ClipStage,
   sample: boolean,
 ): { label: string; state: StepState }[] {
   const order: ClipStage["kind"][] = sample
     ? ["preparing", "writing"]
-    : ["preparing", "extracting", "writing"];
+    : ["preparing", "extracting", "writing", "connecting"];
   const labels: Record<ClipStage["kind"], string> = {
     preparing: sample ? "Load the bundled sample data" : "Read the page",
     extracting:
@@ -210,6 +213,10 @@ export function progressSteps(
         ? `Extract concepts and claims (part ${stage.part} of ${stage.parts})`
         : "Extract concepts and claims",
     writing: "Save to the graph",
+    connecting:
+      stage.kind === "connecting"
+        ? `Find connections to other pages (${stage.pair} of ${stage.pairs})`
+        : "Find connections to other pages",
   };
   const now = order.indexOf(stage.kind);
   return order.map((kind, index) => ({

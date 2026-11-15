@@ -29,7 +29,7 @@ const summary: ClipSummary = {
   newConcepts: 1,
   claims: 4,
   newPage: true,
-  connections: null,
+  connections: { kind: "judged", links: [] },
 };
 const succeeded: ClipResult = { ok: true, summary };
 
@@ -318,6 +318,16 @@ describe("progressSteps", () => {
       { label: "Read the page", state: "done" },
       { label: "Extract concepts and claims (part 1 of 2)", state: "now" },
       { label: "Save to the graph", state: "todo" },
+      { label: "Find connections to other pages", state: "todo" },
+    ]);
+  });
+
+  it("counts the pairs while finding connections after saving", () => {
+    expect(progressSteps({ kind: "connecting", pair: 2, pairs: 5 }, false)).toEqual([
+      { label: "Read the page", state: "done" },
+      { label: "Extract concepts and claims", state: "done" },
+      { label: "Save to the graph", state: "done" },
+      { label: "Find connections to other pages (2 of 5)", state: "now" },
     ]);
   });
 

@@ -33,6 +33,21 @@
   font-size: 12px;
 }
 
+/* 新しいつながり。上限（記憶 1 回で 10 組）まで並んでも吹き出しが伸びすぎないようにする */
+.connections {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.connections li::marker {
+  color: var(--solution);
+}
+
 .progress {
   list-style: none;
   margin: 0;

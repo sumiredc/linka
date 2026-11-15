@@ -1,4 +1,5 @@
 // 記憶（UC1）の依頼・結果・通知の形。吹き出しとサイドパネルが offscreen document とやり取りする
+import type { ConnectionEnd } from "./graph-statements";
 import { type SamplePage, samplePageOf } from "./sample-page";
 import { normalizeUrl } from "./url";
 
@@ -21,7 +22,9 @@ export type ClipStage =
   | { kind: "preparing" }
   /** 分割した本文の `part` 番目（1 から）を抽出している */
   | { kind: "extracting"; part: number; parts: number }
-  | { kind: "writing" };
+  | { kind: "writing" }
+  /** ページをまたぐつながり（UC2）の `pair` 番目（1 から）の組を判定している */
+  | { kind: "connecting"; pair: number; pairs: number };
 
 export type ClipProgress = { target: ClipTarget; stage: ClipStage };
 
@@ -36,9 +39,21 @@ export type ClipSummary = {
   claims: number;
   /** Page が初めてグラフに入ったか。false なら記憶し直し */
   newPage: boolean;
-  /** この記憶で張った ADDRESSES の数（新しいつながり）。判定（UC2）を行わなかったときは null */
-  connections: number | null;
+  /** ページをまたぐつながり（UC2）の結果 */
+  connections: ConnectionsOutcome;
 };
+
+/** この記憶で張った ADDRESSES（solution → concern）の 1 組 */
+export type NewConnection = { solution: ConnectionEnd; concern: ConnectionEnd };
+
+export type ConnectionsOutcome =
+  /** 判定を終えた。`links` が空なら、つながりは見つからなかった */
+  | { kind: "judged"; links: NewConnection[] }
+  /**
+   * Nano が使えない・判定が失敗した・時間切れなどで、つながりを判定しなかった。
+   * ADDRESSES は張っておらず、UC1 で入れた内容はそのまま残っている
+   */
+  | { kind: "notJudged"; reason: string };
 
 export type ClipFailureKind =
   /** URL を解釈できない */

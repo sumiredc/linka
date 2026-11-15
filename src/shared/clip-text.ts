@@ -1,5 +1,5 @@
 // 記憶の進み具合・結果・失敗を、吹き出しとサイドパネルに出す英語の文にする
-import type { ClipFailure, ClipStage, ClipSummary } from "./clip-status";
+import type { ClipFailure, ClipStage, ClipSummary, NewConnection } from "./clip-status";
 
 export const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
@@ -13,6 +13,8 @@ export function stageText(stage: ClipStage): string {
         : "Extracting concepts and claims…";
     case "writing":
       return "Saving to the graph…";
+    case "connecting":
+      return `Checking connections to other pages, ${stage.pair} of ${stage.pairs}…`;
   }
 }
 
@@ -21,12 +23,21 @@ export function countsText(summary: ClipSummary): string {
   return `${plural(summary.concepts, "concept")} (${summary.newConcepts} new), ${plural(summary.claims, "claim")}`;
 }
 
-/** 新しいつながりの行。つながりを判定しなかった記憶では null */
-export function connectionsText(summary: ClipSummary): string | null {
-  if (summary.connections === null) return null;
-  return summary.connections === 0
-    ? "No new connections to other pages."
-    : `${plural(summary.connections, "new connection")} to other pages.`;
+/** 新しいつながり（UC2）の見出しの行。つながりそのものは {@link connectionText} で 1 行ずつ出す */
+export function connectionsText(summary: ClipSummary): string {
+  const { connections } = summary;
+  if (connections.kind === "notJudged") {
+    return `Connections to other pages were not checked (${connections.reason}). The clip itself is saved.`;
+  }
+  return connections.links.length === 0
+    ? "No connections found to other pages."
+    : `New connections: ${connections.links.length}`;
+}
+
+/** 新しいつながり 1 組の文。相手のページの名前を添える */
+export function connectionText(link: NewConnection, clippedUrl: string): string {
+  const other = link.solution.pageUrl === clippedUrl ? link.concern : link.solution;
+  return `“${link.solution.statement}” addresses “${link.concern.statement}” (${other.pageTitle})`;
 }
 
 /** Gemini Nano が使えないときの説明。`reason` は使えない理由 */

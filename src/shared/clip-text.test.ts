@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { ClipSummary } from "./clip-status";
-import { connectionsText, countsText, failureText, stageText } from "./clip-text";
+import type { ClipSummary, NewConnection } from "./clip-status";
+import { connectionsText, connectionText, countsText, failureText, stageText } from "./clip-text";
 
 const summary: ClipSummary = {
   url: "https://example.com/a",
@@ -9,7 +9,22 @@ const summary: ClipSummary = {
   newConcepts: 1,
   claims: 1,
   newPage: true,
-  connections: null,
+  connections: { kind: "judged", links: [] },
+};
+
+const link: NewConnection = {
+  solution: {
+    id: "s",
+    statement: "Use a worker.",
+    pageUrl: "https://example.com/a",
+    pageTitle: "A",
+  },
+  concern: {
+    id: "c",
+    statement: "The main thread blocks.",
+    pageUrl: "https://example.com/b",
+    pageTitle: "Page B",
+  },
 };
 
 describe("clip text", () => {
@@ -17,16 +32,37 @@ describe("clip text", () => {
     expect(countsText(summary)).toBe("3 concepts (1 new), 1 claim");
   });
 
-  it("says nothing about connections when they were not looked for", () => {
-    expect(connectionsText(summary)).toBeNull();
+  it("says no connections were found when the judgement linked nothing", () => {
+    expect(connectionsText(summary)).toBe("No connections found to other pages.");
   });
 
-  it("counts the new connections when they were looked for", () => {
-    expect(connectionsText({ ...summary, connections: 2 })).toBe(
-      "2 new connections to other pages.",
+  it("counts the new connections", () => {
+    expect(connectionsText({ ...summary, connections: { kind: "judged", links: [link] } })).toBe(
+      "New connections: 1",
     );
-    expect(connectionsText({ ...summary, connections: 0 })).toBe(
-      "No new connections to other pages.",
+  });
+
+  it("says why connections were not checked and that the clip is kept", () => {
+    const text = connectionsText({
+      ...summary,
+      connections: { kind: "notJudged", reason: "pair 1 of 2: Error: no answer within 30 s" },
+    });
+    expect(text).toContain("not checked (pair 1 of 2: Error: no answer within 30 s)");
+    expect(text).toContain("The clip itself is saved.");
+  });
+
+  it("names the other page of a new connection", () => {
+    expect(connectionText(link, "https://example.com/a")).toBe(
+      "“Use a worker.” addresses “The main thread blocks.” (Page B)",
+    );
+    expect(connectionText(link, "https://example.com/b")).toBe(
+      "“Use a worker.” addresses “The main thread blocks.” (A)",
+    );
+  });
+
+  it("counts the pairs while checking connections", () => {
+    expect(stageText({ kind: "connecting", pair: 2, pairs: 5 })).toBe(
+      "Checking connections to other pages, 2 of 5…",
     );
   });
 

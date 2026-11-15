@@ -14,6 +14,7 @@ import { samplePageOf } from "../shared/sample-page";
 import { openMemoryDb, run, runScript, runStatements } from "../shared/test/relate-node";
 import { ClipPipeline } from "./clip-pipeline";
 import type { ClipDb, PendingUndo, UndoJournal } from "./clip-undo";
+import { JUDGE_INSTRUCTIONS } from "./judge";
 
 // 記憶の処理本体を、本物の Relate（Node 上のメモリ DB）と偽の Prompt API で確かめる
 
@@ -80,22 +81,42 @@ const SECOND = extraction({
 
 type Answer = string | Error | Promise<string>;
 
-/** 答えを順に返す偽の Prompt API。`state` は availability の答え */
+/** 判定（UC2）の答え。既定では、どの組も解決しないと答える */
+type Judge = (input: string) => Answer;
+
+const verdict = (addresses: boolean) => JSON.stringify({ addresses });
+
+/**
+ * 抽出には答えを順に返し、判定には `judge` で答える偽の Prompt API。`state` は availability の答え。
+ * どちらのセッションかは、create に渡された指示で見分ける
+ */
 class FakeModel implements LanguageModelStatic {
   prompts = 0;
+  /** 判定に渡された入力 */
+  readonly judged: string[] = [];
 
   constructor(
     private readonly answers: Answer[],
     public state = "available",
+    private readonly judge: Judge = () => verdict(false),
   ) {}
 
   async availability() {
     return this.state;
   }
 
-  async create(): Promise<LanguageModelSession> {
+  async create(options?: unknown): Promise<LanguageModelSession> {
+    const prompts = (options as { initialPrompts?: { content: string }[] } | undefined)
+      ?.initialPrompts;
+    const judging = prompts?.[0]?.content === JUDGE_INSTRUCTIONS;
     const session: LanguageModelSession = {
-      prompt: async () => {
+      prompt: async (input) => {
+        if (judging) {
+          this.judged.push(input);
+          const answer = this.judge(input);
+          if (answer instanceof Error) throw answer;
+          return answer;
+        }
         this.prompts++;
         const answer = this.answers.shift();
         if (answer === undefined) throw new Error("no more answers");
@@ -182,7 +203,9 @@ function count(db: RelateDb, query: string, params?: CypherStatement["params"]):
   return Number(run(db, query, params).rows[0]?.n);
 }
 
-function setup(options: { model?: LanguageModelStatic | null; seeded?: boolean } = {}) {
+function setup(
+  options: { model?: LanguageModelStatic | null; seeded?: boolean; judgeTimeoutMs?: number } = {},
+) {
   const db = openMemoryDb();
   if (options.seeded ?? true) runScript(db, seed);
   const conn = testDb(db);
@@ -198,6 +221,7 @@ function setup(options: { model?: LanguageModelStatic | null; seeded?: boolean }
       extensionRoot: ROOT,
       onEvent: (event) => events.push(event),
       now: () => new Date(Date.UTC(2026, 10, 15, 9, 0, clock++)).toISOString(),
+      judge: { timeoutMs: options.judgeTimeoutMs ?? 1_000 },
       fetchFile: async (url) =>
         url === `${ROOT}samples/keep-offline-data.json`
           ? new Response(sampleJson)
@@ -314,7 +338,7 @@ describe("clipping a page", () => {
         newConcepts: 2,
         claims: 2,
         newPage: true,
-        connections: null,
+        connections: { kind: "judged", links: [] },
       },
     });
     expect(count(t.db, "MATCH (p:Page {url: $url}) RETURN count(p) AS n", { url: PAGE })).toBe(1);
@@ -368,13 +392,20 @@ describe("clipping a page", () => {
       "Graph",
       text(`${"a".repeat(CHUNK_MAX_CHARS - 1_000)}\n\n${"b".repeat(CHUNK_MAX_CHARS - 1_000)}`),
     );
-    expect(
-      t.events.map((event) => (event.kind === "progress" ? event.progress.stage : event.kind)),
-    ).toEqual([
+    const stages = t.events.map((event) =>
+      event.kind === "progress" ? event.progress.stage : event.kind,
+    );
+    // FIRST の solution は、デモデータの別のページの concern と OPFS を共有するので判定に進む
+    const pairs = stages.filter(
+      (stage) => typeof stage !== "string" && stage.kind === "connecting",
+    );
+    expect(pairs.length).toBeGreaterThan(0);
+    expect(stages).toEqual([
       { kind: "preparing" },
       { kind: "extracting", part: 1, parts: 2 },
       { kind: "extracting", part: 2, parts: 2 },
       { kind: "writing" },
+      ...pairs.map((_, index) => ({ kind: "connecting", pair: index + 1, pairs: pairs.length })),
       "finished",
     ]);
     expect(t.events.at(-1)).toMatchObject({
@@ -401,8 +432,11 @@ describe("a sample page", () => {
     const result = await t.pipeline.clip(SAMPLE_TAB, "ignored", sampleBody());
     expect(result).toMatchObject({
       ok: true,
-      summary: { url: SAMPLE_URL, newPage: true, claims: 3, connections: 2 },
+      summary: { url: SAMPLE_URL, newPage: true, claims: 3 },
     });
+    if (!result.ok) throw new Error("unreachable");
+    const { connections } = result.summary;
+    expect(connections.kind === "judged" && connections.links).toHaveLength(2);
     const links = run(
       t.db,
       [
@@ -429,7 +463,7 @@ describe("a sample page", () => {
     const t = setup({ model: null, seeded: false });
     expect(await t.pipeline.clip(SAMPLE_TAB, "ignored", sampleBody())).toMatchObject({
       ok: true,
-      summary: { connections: 0 },
+      summary: { connections: { kind: "judged", links: [] } },
     });
   });
 
@@ -438,10 +472,164 @@ describe("a sample page", () => {
     await t.pipeline.clip(SAMPLE_TAB, "ignored", sampleBody());
     const once = dump(t.db);
     const again = await t.pipeline.clip(SAMPLE_TAB, "ignored", sampleBody());
-    expect(again).toMatchObject({ ok: true, summary: { newPage: false, connections: 2 } });
+    expect(again).toMatchObject({ ok: true, summary: { newPage: false } });
+    if (!again.ok) throw new Error("unreachable");
+    const { connections } = again.summary;
+    expect(connections.kind === "judged" && connections.links).toHaveLength(2);
     const strip = (rows: string[]) => rows.map((row) => row.replace(/"clippedAt":"[^"]*"/, ""));
     expect(strip(dump(t.db).nodes)).toEqual(strip(once.nodes));
     expect(strip(dump(t.db).rels)).toEqual(strip(once.rels));
+  });
+});
+
+describe("connecting concerns and solutions across pages (UC2)", () => {
+  const SOLUTION = "Relate keeps the graph in OPFS from a dedicated worker.";
+  const addressesMdn: Judge = (input) => verdict(input.includes(MDN_CONCERN));
+
+  /** UC1 だけを済ませたグラフ。判定ではどの組も解決しないと答える */
+  async function clippedWithoutConnections() {
+    const t = setup({ model: new FakeModel([answer(FIRST)]) });
+    expect(await t.pipeline.clip(PAGE, "Graph", text())).toMatchObject({ ok: true });
+    return dump(t.db);
+  }
+
+  function addressesFromPage(db: RelateDb) {
+    return run(
+      db,
+      [
+        "MATCH (sp:Page)-[:ASSERTS]->(s:Claim)-[:ADDRESSES]->(c:Claim)<-[:ASSERTS]-(cp:Page)",
+        "WHERE sp.url = $url OR cp.url = $url",
+        "RETURN s.id AS solution, c.id AS concern",
+      ].join("\n"),
+      { url: PAGE },
+    ).rows;
+  }
+
+  function notJudgedReason(result: ClipResult): string {
+    if (!result.ok) throw new Error(`the clip failed: ${result.error.message}`);
+    const { connections } = result.summary;
+    if (connections.kind !== "notJudged") throw new Error("the connections were judged");
+    return connections.reason;
+  }
+
+  it("links a new solution to a concern on another page that Nano says it addresses", async () => {
+    const model = new FakeModel([answer(FIRST)], "available", addressesMdn);
+    const t = setup({ model });
+    const result = await t.pipeline.clip(PAGE, "Graph", text());
+
+    expect(model.judged.length).toBeGreaterThan(1);
+    expect(addressesFromPage(t.db)).toEqual([
+      { solution: claimId(PAGE, SOLUTION), concern: claimId(MDN_OPFS, MDN_CONCERN) },
+    ]);
+    expect(result).toMatchObject({
+      ok: true,
+      summary: {
+        connections: {
+          kind: "judged",
+          links: [
+            {
+              solution: { id: claimId(PAGE, SOLUTION), statement: SOLUTION, pageUrl: PAGE },
+              concern: { id: claimId(MDN_OPFS, MDN_CONCERN), pageUrl: MDN_OPFS },
+            },
+          ],
+        },
+      },
+    });
+  });
+
+  it("asks Nano about both statements and the concepts they share", async () => {
+    const model = new FakeModel([answer(FIRST)], "available", addressesMdn);
+    const t = setup({ model });
+    await t.pipeline.clip(PAGE, "Graph", text());
+    expect(model.judged).toContain(
+      `Concern: ${MDN_CONCERN}\nSolution: ${SOLUTION}\nShared concepts: OPFS`,
+    );
+  });
+
+  it("finds no connections, without asking Nano, when no other page shares a concept", async () => {
+    const model = new FakeModel([answer(FIRST)]);
+    const t = setup({ model, seeded: false });
+    const result = await t.pipeline.clip(PAGE, "Graph", text());
+    expect(result).toMatchObject({
+      ok: true,
+      summary: { connections: { kind: "judged", links: [] } },
+    });
+    expect(model.judged).toEqual([]);
+  });
+
+  it("names the seconds and keeps what UC1 wrote when a judgement times out", async () => {
+    const expected = await clippedWithoutConnections();
+    const model = new FakeModel([answer(FIRST)], "available", () => new Promise<string>(() => {}));
+    const t = setup({ model, judgeTimeoutMs: 20 });
+    const result = await t.pipeline.clip(PAGE, "Graph", text());
+    expect(notJudgedReason(result)).toContain("no answer within 0.02 s");
+    expect(dump(t.db)).toEqual(expected);
+    expect(t.journal.value).toBeNull();
+  });
+
+  it("draws no ADDRESSES and keeps what UC1 wrote when a later judgement fails", async () => {
+    const expected = await clippedWithoutConnections();
+    let calls = 0;
+    // 1 組目は解決すると答え、2 組目で失敗する。1 組目のつながりも張らない
+    const model = new FakeModel([answer(FIRST)], "available", () =>
+      ++calls === 1 ? verdict(true) : new Error("kErrorUnknown"),
+    );
+    const t = setup({ model });
+    const result = await t.pipeline.clip(PAGE, "Graph", text());
+    expect(notJudgedReason(result)).toContain("kErrorUnknown");
+    expect(dump(t.db)).toEqual(expected);
+  });
+
+  it("draws no ADDRESSES and keeps what UC1 wrote when Nano answers in the wrong shape", async () => {
+    const expected = await clippedWithoutConnections();
+    const model = new FakeModel([answer(FIRST)], "available", () => "maybe");
+    const t = setup({ model });
+    const result = await t.pipeline.clip(PAGE, "Graph", text());
+    expect(notJudgedReason(result)).toContain("did not match the schema");
+    expect(dump(t.db)).toEqual(expected);
+  });
+
+  it("keeps what UC1 wrote when Nano is not available any more for the judgement", async () => {
+    const expected = await clippedWithoutConnections();
+    const t = setup({ model: new FakeModel([answer(FIRST)], "available", addressesMdn) });
+    // 抽出が済んで書き始めたところで、Prompt API が使えなくなる
+    t.conn.state.beforeWrite = () => {
+      t.setModel(null);
+      return undefined;
+    };
+    const result = await t.pipeline.clip(PAGE, "Graph", text());
+    expect(notJudgedReason(result)).toContain("not available");
+    expect(dump(t.db)).toEqual(expected);
+  });
+
+  it("removes the ADDRESSES it began to save when saving them fails", async () => {
+    const expected = await clippedWithoutConnections();
+    const t = setup({ model: new FakeModel([answer(FIRST)], "available", addressesMdn) });
+    t.conn.state.beforeWrite = (write, query) => {
+      if (query.includes("MERGE (s)-[:ADDRESSES]->(c)")) {
+        t.conn.state.faults = [{ write, when: "after" }];
+      }
+      return undefined;
+    };
+    const result = await t.pipeline.clip(PAGE, "Graph", text());
+    expect(notJudgedReason(result)).toContain("could not save the connections");
+    expect(dump(t.db)).toEqual(expected);
+  });
+
+  it("does not take another page's clip while it is judging", async () => {
+    let release: (value: string) => void = () => {};
+    const held = new Promise<string>((resolve) => {
+      release = resolve;
+    });
+    const t = setup({ model: new FakeModel([answer(FIRST)], "available", () => held) });
+    const clipping = t.pipeline.clip(PAGE, "Graph", text());
+    await vi.waitFor(() => expect(t.pipeline.current()?.stage.kind).toBe("connecting"));
+    expect(await t.pipeline.clip(OTHER, "Notes", text())).toMatchObject({
+      ok: false,
+      error: { kind: "busy" },
+    });
+    release(verdict(false));
+    expect(await clipping).toMatchObject({ ok: true });
   });
 });
 
