@@ -1,6 +1,8 @@
 // DB の唯一の持ち主。画面から直接届いた依頼を Relate の worker に渡し、DB の変化を全画面に知らせる
 import demoCypher from "../../seed/demo.cypher?raw";
+import type { ClipRequest } from "../shared/clip-status";
 import {
+  type CypherParams,
   type DbResponse,
   failure,
   isFromExtensionPage,
@@ -8,6 +10,8 @@ import {
   type RuntimeMessage,
 } from "../shared/messages";
 import { languageModel } from "../shared/prompt-api";
+import { ClipPipeline } from "./clip-pipeline";
+import { storedUndoJournal } from "./clip-undo";
 import { DbClient } from "./db-client";
 import { ModelTracker } from "./model-tracker";
 import { storedSeedProgress } from "./seed";
@@ -50,17 +54,55 @@ const model = new ModelTracker({
   },
 });
 
+const clips = new ClipPipeline({
+  db: {
+    execute: (statement) =>
+      client.request({
+        kind: "execute",
+        query: statement.query,
+        params: statement.params as CypherParams,
+      }),
+  },
+  api: languageModel,
+  journal: storedUndoJournal(localStorage),
+  extensionRoot: chrome.runtime.getURL(""),
+  onEvent: (event) => {
+    const message: RuntimeMessage = { target: "ui", type: "clip", event };
+    chrome.runtime.sendMessage(message).catch(() => {});
+  },
+});
+
+function handleClip(request: ClipRequest): Promise<DbResponse> {
+  switch (request.kind) {
+    case "clip":
+      return clips
+        .clip(request.tabUrl, request.title, request.body)
+        .then((value) => ({ ok: true, value }));
+    case "current":
+      return Promise.resolve({ ok: true, value: clips.current() });
+    case "isClipped":
+      return clips.isClipped(request.tabUrl);
+  }
+}
+
+function handle(message: Extract<RuntimeMessage, { target: "offscreen" }>): Promise<DbResponse> {
+  switch (message.type) {
+    case "model":
+      return (message.request.kind === "download" ? model.download() : model.status()).then(
+        (value) => ({ ok: true, value }),
+      );
+    case "clip":
+      return handleClip(message.request);
+    case "db":
+      return client.request(message.request);
+  }
+}
+
 chrome.runtime.onMessage.addListener(
   (message: unknown, sender, sendResponse: (response: DbResponse) => void) => {
     if (!isMessageFor(message, "offscreen")) return false;
     if (!isFromExtensionPage(sender, chrome.runtime.getURL(""))) return false;
-    const response =
-      message.type === "model"
-        ? (message.request.kind === "download" ? model.download() : model.status()).then(
-            (value): DbResponse => ({ ok: true, value }),
-          )
-        : client.request(message.request);
-    response.then(sendResponse, (error: unknown) =>
+    handle(message).then(sendResponse, (error: unknown) =>
       sendResponse(failure("exception", error instanceof Error ? error.message : String(error))),
     );
     return true;

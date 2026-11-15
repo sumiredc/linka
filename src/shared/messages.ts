@@ -1,5 +1,6 @@
 // 画面・service worker・offscreen document の間で chrome.runtime を通して送るメッセージ。
 // 長い依頼が service worker の休止で返事を失わないよう、DB への依頼と通知は service worker を通さない
+import type { ClipEvent, ClipRequest } from "./clip-status";
 import type { ModelStatus } from "./model-status";
 
 export type CypherParams = Record<string, unknown>;
@@ -66,10 +67,14 @@ export type RuntimeMessage =
   | { target: "offscreen"; type: "db"; request: DbRequest }
   /** 返事は `DbResponse<ModelStatus>` */
   | { target: "offscreen"; type: "model"; request: ModelRequest }
+  /** 返事は `DbResponse<ClipResultOf<R>>`。記憶の依頼は、記憶が終わってから返事をする */
+  | { target: "offscreen"; type: "clip"; request: ClipRequest }
   /** offscreen document から拡張機能のすべてのページへ */
   | { target: "ui"; type: "notify"; notification: DbNotification }
   /** offscreen document から拡張機能のすべてのページへ。モデルの状態やダウンロードの進み具合が変わった */
-  | { target: "ui"; type: "model"; status: ModelStatus };
+  | { target: "ui"; type: "model"; status: ModelStatus }
+  /** offscreen document から拡張機能のすべてのページへ。記憶の進み具合と結果 */
+  | { target: "ui"; type: "clip"; event: ClipEvent };
 
 export type EnsureResponse = { ok: true } | DbFailure;
 
