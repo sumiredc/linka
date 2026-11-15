@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { judgePrompt } from "../offscreen/judge";
+import type {
+  LanguageModelCreateOptions,
+  LanguageModelSession,
+  LanguageModelStatic,
+} from "../shared/prompt-api";
 import {
   formatReport,
   type LabeledPair,
   type PairOutcome,
+  runJudge,
   scoreOutcomes,
   toCandidate,
 } from "./judge-accuracy";
@@ -104,5 +110,65 @@ describe("formatReport", () => {
   it("lists the false positives by id and marks them per pair", () => {
     expect(report).toContain("- current：FP f1, f2／FN 無し／失敗 無し");
     expect(report).toContain("| f1 | false | true FP 1.0 秒 |");
+  });
+});
+
+/** 答えを順に返す偽の Prompt API。base の destroy を数える */
+function fakeModel(answers: (string | Error)[], state = "available") {
+  const model = {
+    baseDestroyed: false,
+    systemPrompts: [] as unknown[],
+    api: {
+      availability: async () => state,
+      create: async (options?: LanguageModelCreateOptions) => {
+        model.systemPrompts.push(options?.initialPrompts?.[0]?.content);
+        const clone = async (): Promise<LanguageModelSession> => ({
+          prompt: async () => {
+            const answer = answers.shift();
+            if (answer === undefined) throw new Error("no more answers");
+            if (answer instanceof Error) throw answer;
+            return answer;
+          },
+          clone,
+          destroy: () => {},
+        });
+        return {
+          prompt: () => Promise.reject(new Error("the base session must not be prompted")),
+          clone,
+          destroy: () => {
+            model.baseDestroyed = true;
+          },
+        };
+      },
+    } satisfies LanguageModelStatic,
+  };
+  return model;
+}
+
+const yes = JSON.stringify({ addresses: true });
+const no = JSON.stringify({ addresses: false });
+
+describe("runJudge", () => {
+  it("judges every pair with the given instructions, going on after a failed pair", async () => {
+    const model = fakeModel([yes, new Error("kErrorUnknown"), no, no]);
+    const result = await runJudge(model.api, "strict rules", PAIRS);
+    expect(model.systemPrompts).toEqual(["strict rules"]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.outcomes.map((outcome) => [outcome.id, outcome.result])).toEqual([
+      ["t1", { ok: true, addresses: true }],
+      ["t2", { ok: false, error: { kind: "prompt", message: "Error: kErrorUnknown" } }],
+      ["f1", { ok: true, addresses: false }],
+      ["f2", { ok: true, addresses: false }],
+    ]);
+    expect(model.baseDestroyed).toBe(true);
+  });
+
+  it("reports why it could not measure when the model is not available", async () => {
+    const model = fakeModel([], "downloadable");
+    expect(await runJudge(model.api, "rules", PAIRS)).toEqual({
+      ok: false,
+      message: "unavailable: the model is downloadable",
+    });
   });
 });
