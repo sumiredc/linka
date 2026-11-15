@@ -28,7 +28,7 @@ const samplePages = Object.keys(
   import.meta.glob("../public/samples/*.html", { query: "?url", eager: true }),
 );
 const demo = DemoDataSchema.parse(JSON.parse(demoJson));
-const EXTENSION = "chrome-extension://abcdefghijklmnopabcdefghijklmnop/";
+const REPOSITORY_FILES = "https://github.com/sumiredc/linka/blob/main/public/";
 
 describe("public/samples", () => {
   it("bundles 2 to 3 sample pages", () => {
@@ -52,6 +52,11 @@ describe.each(samples)("$file", ({ file, data }) => {
     expect(`../public/${SampleSchema.parse(data).path}`).toBe(file.replace(/\.json$/, ".html"));
   });
 
+  it("uses the sample file's URL in the repository as its page URL", () => {
+    const { path, url } = SampleSchema.parse(data);
+    expect(url).toBe(`${REPOSITORY_FILES}${path}`);
+  });
+
   it("links to the demo graph with at least one judged pair", () => {
     expect(SampleSchema.parse(data).addresses.length).toBeGreaterThan(0);
   });
@@ -64,8 +69,8 @@ describe.each(samples)("clipping $file on top of the seed", ({ data }) => {
   beforeAll(() => {
     db = openMemoryDb();
     runScript(db, demoCypher);
-    clip = sampleClip(sample, EXTENSION, "2026-11-15T09:00:00Z");
-    const links = resolveAddresses([...demo.clips, clip], sample.addresses, EXTENSION);
+    clip = sampleClip(sample, "2026-11-15T09:00:00Z");
+    const links = resolveAddresses([...demo.clips, clip], sample.addresses);
     runScript(db, toCypherScript([...buildClipStatements(clip), buildAddressesStatement(links)]));
   });
 
