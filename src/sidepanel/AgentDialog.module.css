@@ -1,4 +1,3 @@
-/* mock/styles.css の export dialog に合わせる */
 .dialog {
   width: min(520px, calc(100vw - 32px));
 }
