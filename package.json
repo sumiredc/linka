@@ -39,6 +39,7 @@
     "@relate/relate-wasm": "1.0.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
+    "react-force-graph-2d": "1.29.2",
     "zod": "4.6.7"
   }
 }

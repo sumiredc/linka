@@ -1,0 +1,50 @@
+/* mock/styles.css の色と文字。Web フォントは読まない（ページの外へ取りに行かないため） */
+:root {
+  --paper: #eef1f6;
+  --panel: #f8f9fc;
+  --ink: #1c2638;
+  --ink-soft: #566079;
+  --rule: #d5dae4;
+  --concern: #b02e66;
+  --concern-tint: #f6e3ec;
+  --solution: #157a6e;
+  --solution-tint: #dcf0ec;
+  --other: #8a93a6;
+  --act: #3445c9;
+  --act-tint: #e4e7fb;
+  --warn: #8a5a00;
+  --warn-tint: #fbf0d9;
+
+  --ui: system-ui, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  --code: ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--panel);
+  color: var(--ink);
+  font-family: var(--ui);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--act);
+  outline-offset: 2px;
+}
