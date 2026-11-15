@@ -40,11 +40,11 @@ function uniqueBy<T>(items: readonly T[], keyOf: (item: T) => string): T[] {
   return [...seen.values()];
 }
 
-/**
- * 1 回分のクリップを、パラメータ付きの MERGE 文の並びにする。同じクリップを何度流してもノードと関係は増えない。
- * 再クリップでは、先に {@link buildReclipStatements} で古い内容を消してから流す。
- */
-export function buildClipStatements(input: Clip): CypherStatement[] {
+/** 1 回分のクリップがグラフに書く行。ノードは MERGE のキーで、関係は両端のキーで表す */
+export type ClipRows = ReturnType<typeof clipRows>;
+
+/** クリップを、グラフに書く行に揃える。{@link buildClipStatements} はこの行をそのまま書く */
+export function clipRows(input: Clip) {
   // 抽出結果に壊れたサロゲートがあっても、パラメータと埋め込みの両方で同じ値（U+FFFD）にする
   const clip = wellFormedValue(input);
   const url = normalizeUrl(clip.url);
@@ -85,17 +85,43 @@ export function buildClipStatements(input: Clip): CypherStatement[] {
     clippedAt: clip.clippedAt,
     source: clip.source,
   };
+  return {
+    url,
+    source: clip.source,
+    page,
+    concepts: concepts.rows(),
+    authors,
+    claims,
+    about,
+    related,
+  };
+}
+
+/**
+ * 1 回分のクリップを、パラメータ付きの MERGE 文の並びにする。同じクリップを何度流してもノードと関係は増えない。
+ * 再クリップでは、先に {@link buildReclipStatements} で古い内容を消してから流す。
+ */
+export function buildClipStatements(input: Clip): CypherStatement[] {
+  const {
+    url,
+    source,
+    page,
+    concepts: conceptRows,
+    authors,
+    claims,
+    about,
+    related,
+  } = clipRows(input);
   const statements: CypherStatement[] = [
     {
       // 選択範囲のクリップは既存の Page に Claim を足すだけで、ページ全体の要約などは上書きしない
       query:
-        clip.source === "selection"
+        source === "selection"
           ? "MERGE (p:Page {url: $page.url})\nON CREATE SET p += $page"
           : "MERGE (p:Page {url: $page.url})\nSET p += $page",
       params: { page },
     },
   ];
-  const conceptRows = concepts.rows();
   if (conceptRows.length > 0) {
     statements.push({
       query: [
@@ -132,7 +158,7 @@ export function buildClipStatements(input: Clip): CypherStatement[] {
       ].join("\n"),
       params: {
         url,
-        source: clip.source,
+        source,
         claims: claims.map(({ id, statement, type }) => ({ id, statement, type })),
       },
     });
