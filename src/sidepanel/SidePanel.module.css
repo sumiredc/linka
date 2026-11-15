@@ -100,7 +100,7 @@
 .clip {
   display: flex;
   gap: 10px;
-  align-items: center;
+  align-items: flex-start;
   padding: 8px 14px 12px;
   border-bottom: 1px solid var(--rule);
 }
@@ -108,6 +108,23 @@
   margin: 0;
   font-size: 13px;
   color: var(--ink-soft);
+}
+.clipBody {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.clipStatus {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--act);
+  overflow-wrap: anywhere;
+}
+.clipOk {
+  color: var(--solution);
+}
+.clipBad {
+  color: var(--concern);
 }
 
 .graphWrap {
