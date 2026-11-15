@@ -98,6 +98,47 @@ describe("the page limit", () => {
     }
   });
 
+  it("draws exactly the claims and concepts of the kept pages, each with a link", () => {
+    const db = openMemoryDb();
+    runScript(db, seed);
+    const kept = "MATCH (p:Page) WITH p ORDER BY p.clippedAt DESC, p.url LIMIT 3";
+    const claims = scalar(
+      db,
+      `${kept} MATCH (p)-[:ASSERTS]->(c:Claim) RETURN count(DISTINCT c) AS n`,
+    );
+    const concepts = scalar(
+      db,
+      `${kept} MATCH (p)-[:MENTIONS|ASSERTS]->(x) OPTIONAL MATCH (x)-[:ABOUT]->(a:Concept)
+       WITH CASE WHEN x:Concept THEN x ELSE a END AS k WHERE k IS NOT NULL
+       RETURN count(DISTINCT k) AS n`,
+    );
+
+    const view = readView(db, { limit: 3 });
+    const counts = countKinds(view);
+    expect(counts.Claim).toBe(claims);
+    expect(counts.Concept).toBe(concepts);
+    const linked = new Set(view.links.flatMap((link) => [link.source, link.target]));
+    for (const node of view.nodes) {
+      if (node.kind !== "page") expect(linked.has(node.id), node.id).toBe(true);
+    }
+  });
+
+  it("reads only the claims and mentions of the kept pages", () => {
+    const db = openMemoryDb();
+    runScript(db, seed);
+    const kept = "MATCH (p:Page) WITH p ORDER BY p.clippedAt DESC, p.url LIMIT 3";
+    const results = db
+      .executeScript(GRAPH_VIEW_SCRIPT, JSON.stringify({ limit: 3 }))
+      .map((json) => JSON.parse(json) as { rows: unknown[] });
+    // 文の並びは graph-view.ts の STATEMENTS と同じ。2 番目が Claim、3 番目が MENTIONS
+    expect(results[2]?.rows).toHaveLength(
+      scalar(db, `${kept} MATCH (p)-[:ASSERTS]->(c:Claim) RETURN count(*) AS n`) as number,
+    );
+    expect(results[3]?.rows).toHaveLength(
+      scalar(db, `${kept} MATCH (p)-[:MENTIONS]->(k:Concept) RETURN count(*) AS n`) as number,
+    );
+  });
+
   it("puts pages without a clip time after the dated ones", () => {
     const db = openMemoryDb();
     for (let i = 0; i < PAGE_LIMIT; i++) {
