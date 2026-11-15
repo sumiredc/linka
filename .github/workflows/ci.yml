@@ -35,3 +35,5 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+      - name: Seed is up to date
+        run: npm run seed && git diff --exit-code seed/
