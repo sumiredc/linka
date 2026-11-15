@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { askDb } from "../shared/db";
 import type { StorageState } from "../shared/messages";
 import type { ModelStatus } from "../shared/model-status";
+import { AgentDialog, useAgentHandoff } from "./AgentDialog";
 import { aiBadge } from "./ai-status";
 import { ClipActivity } from "./ClipActivity";
 import { GraphCanvas } from "./GraphCanvas";
@@ -94,8 +95,10 @@ export function SidePanel() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const handoff = useAgentHandoff();
 
   const view = graph.kind === "loading" ? null : graph.view;
+  const canExport = (view?.totalPages ?? 0) > 0;
   const selected = (selectedId && view?.nodes.find((node) => node.id === selectedId)) || null;
   const focus = useMemo(
     () =>
@@ -138,7 +141,12 @@ export function SidePanel() {
           Linka
         </div>
         <AiStatus status={model} />
-        <PanelMenu onReset={() => setResetOpen(true)} />
+        <PanelMenu
+          canExport={canExport}
+          onExport={handoff.exportNow}
+          onGuide={handoff.showGuide}
+          onReset={() => setResetOpen(true)}
+        />
       </header>
 
       <ClipActivity />
@@ -193,6 +201,7 @@ export function SidePanel() {
         )}
       </section>
 
+      <AgentDialog handoff={handoff} canExport={canExport} />
       <ResetDialog open={resetOpen} onClose={() => setResetOpen(false)} onConfirm={reset} />
     </div>
   );
