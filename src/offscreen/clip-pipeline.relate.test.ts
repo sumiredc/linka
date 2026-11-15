@@ -660,6 +660,35 @@ describe("a write that fails partway", () => {
   });
 });
 
+/** 書き込みの途中で DB が使えなくなり、取り消しが残ったままになる */
+async function leaveUndo(t: ReturnType<typeof setup>) {
+  t.conn.state.faults = [{ write: t.conn.state.writes + 3, when: "after" }];
+  const original = t.conn.execute;
+  t.conn.execute = async (statement) => {
+    const response = await original(statement);
+    if (!response.ok) t.conn.state.down = true;
+    return response;
+  };
+  const result = await t.pipeline.clip(PAGE, "Graph", text());
+  expect(result).toMatchObject({ ok: false, error: { kind: "write", restored: false } });
+  t.conn.execute = original;
+  t.conn.state.down = false;
+}
+
+/** Reset to demo data と同じく、グラフをすべて消してデモデータを入れ直す */
+function resetToDemo(t: ReturnType<typeof setup>) {
+  return async () => {
+    runScript(t.db, `MATCH (n) DETACH DELETE n;\n${seed}`);
+    return { ok: true as const, value: [] };
+  };
+}
+
+function demoDump() {
+  const db = openMemoryDb();
+  runScript(db, seed);
+  return dump(db);
+}
+
 describe("the undo of a clip being written", () => {
   it("is not run by an isClipped asked in the middle of the write", async () => {
     const t = setup({ model: new FakeModel([answer(FIRST)]) });
@@ -674,6 +703,78 @@ describe("the undo of a clip being written", () => {
     expect(
       count(t.db, "MATCH (:Page {url: $url})-[:ASSERTS]->() RETURN count(*) AS n", { url: PAGE }),
     ).toBe(FIRST.claims.length);
+    expect(t.journal.value).toBeNull();
+  });
+});
+
+describe("replacing the whole graph", () => {
+  it("drops an undo read from the graph it replaces", async () => {
+    // 空のグラフで書きかけになったので、取り消しは opfs などの Concept を「新しく入れたもの」として消す
+    const t = setup({ model: new FakeModel([answer(FIRST)]), seeded: false });
+    await leaveUndo(t);
+    expect(await t.pipeline.replaceGraph(resetToDemo(t))).toMatchObject({ ok: true });
+    expect(t.journal.value).toBeNull();
+    expect(await t.restart().isClipped(PAGE)).toEqual({ ok: true, value: null });
+    expect(dump(t.db)).toEqual(demoDump());
+  });
+
+  it("waits for an undo that is running before it replaces the graph", async () => {
+    const t = setup({ model: new FakeModel([answer(FIRST)]), seeded: false });
+    await leaveUndo(t);
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let holding = false;
+    t.conn.state.beforeWrite = () => {
+      if (holding) return undefined;
+      holding = true;
+      return held;
+    };
+    const restarted = t.restart();
+    await vi.waitFor(() => expect(holding).toBe(true));
+    const reset = restarted.replaceGraph(resetToDemo(t));
+    release();
+    expect(await reset).toMatchObject({ ok: true });
+    // 取り消しが走り終わるのを待ってから見る
+    await restarted.isClipped(PAGE);
+    expect(dump(t.db)).toEqual(demoDump());
+  });
+
+  it("is refused while a page is being clipped", async () => {
+    let resolve: (value: string) => void = () => {};
+    const pending = new Promise<string>((r) => {
+      resolve = r;
+    });
+    const t = setup({ model: new FakeModel([pending]) });
+    const clipping = t.pipeline.clip(PAGE, "Graph in the browser", text());
+    let ran = false;
+    const reset = await t.pipeline.replaceGraph(async () => {
+      ran = true;
+      return { ok: true, value: [] };
+    });
+    expect(reset).toEqual({
+      ok: false,
+      error: {
+        kind: "busy",
+        message: "Linka is clipping “Graph in the browser”. Try again when it finishes.",
+      },
+    });
+    expect(ran).toBe(false);
+    resolve(answer(FIRST));
+    expect(await clipping).toMatchObject({ ok: true });
+  });
+
+  it("drops an undo when a script changes the graph, but not when it only reads", async () => {
+    const t = setup({ model: new FakeModel([answer(FIRST)]) });
+    await leaveUndo(t);
+    const script = (query: string) => async () => {
+      const results = runScript(t.db, query);
+      return { ok: true as const, value: results };
+    };
+    await t.pipeline.runScript(script("MATCH (n) RETURN count(n) AS n;"));
+    expect(t.journal.value).not.toBeNull();
+    await t.pipeline.runScript(script("CREATE (:Page {url: 'https://example.com/x'});"));
     expect(t.journal.value).toBeNull();
   });
 });

@@ -3,6 +3,7 @@ import demoCypher from "../../seed/demo.cypher?raw";
 import type { ClipRequest } from "../shared/clip-status";
 import {
   type CypherParams,
+  type DbRequest,
   type DbResponse,
   failure,
   isFromExtensionPage,
@@ -85,6 +86,19 @@ function handleClip(request: ClipRequest): Promise<DbResponse> {
   }
 }
 
+// グラフを書き換えうる依頼は記憶の処理を通し、取り消しの記録が別のグラフに流れないようにする。
+// execute は開発用のコンソールからしか書き込まないので通さない。記憶と同時に書くと混ざりうるが、開発用なので許す
+function handleDb(request: DbRequest): Promise<DbResponse> {
+  switch (request.kind) {
+    case "resetToDemo":
+      return clips.replaceGraph(() => client.request(request));
+    case "executeScript":
+      return clips.runScript(() => client.request(request));
+    default:
+      return client.request(request);
+  }
+}
+
 function handle(message: Extract<RuntimeMessage, { target: "offscreen" }>): Promise<DbResponse> {
   switch (message.type) {
     case "model":
@@ -94,7 +108,7 @@ function handle(message: Extract<RuntimeMessage, { target: "offscreen" }>): Prom
     case "clip":
       return handleClip(message.request);
     case "db":
-      return client.request(message.request);
+      return handleDb(message.request);
   }
 }
 

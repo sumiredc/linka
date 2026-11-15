@@ -22,7 +22,7 @@ import {
   buildReclipStatements,
   clipRows,
 } from "../shared/graph-statements";
-import { type DbResponse, failure } from "../shared/messages";
+import { type DbResponse, failure, type RelateResult } from "../shared/messages";
 import type { LanguageModelStatic } from "../shared/prompt-api";
 import { loadSample } from "../shared/sample-page";
 import { normalizeUrl } from "../shared/url";
@@ -286,6 +286,40 @@ export class ClipPipeline {
       }
     });
     return this.#recovery;
+  }
+
+  /**
+   * グラフをまるごと置き換える依頼（Reset to demo data）を流す。記憶の最中は断る。
+   * 取り消しの記録は読んだときのグラフにだけ使えるので、置き換える前に捨てる。
+   * 流し終えられない取り消しが記憶を止め続けたときの逃げ道にもなる
+   */
+  async replaceGraph<T>(run: () => Promise<DbResponse<T>>): Promise<DbResponse<T>> {
+    // 流している途中の取り消しが、置き換えたあとのグラフに混ざらないよう終わるのを待つ
+    await this.#recovery;
+    const running = this.#current;
+    if (running) {
+      return failure(
+        "busy",
+        `Linka is clipping “${running.target.title}”. Try again when it finishes.`,
+      );
+    }
+    this.options.journal.clear();
+    return run();
+  }
+
+  /**
+   * スクリプトを流す。サイドパネルはグラフを読むのにも使うので、記憶の最中でも断らない。
+   * グラフを変えたなら、それより前に読んだ取り消しの記録は使えないので捨てる
+   */
+  async runScript(
+    run: () => Promise<DbResponse<RelateResult[]>>,
+  ): Promise<DbResponse<RelateResult[]>> {
+    const response = await run();
+    const changed =
+      response.ok &&
+      response.value.some((result) => Object.values(result.stats).some((count) => count > 0));
+    if (changed && this.#current === null) this.options.journal.clear();
+    return response;
   }
 
   #setStage(target: ClipTarget, stage: ClipStage): void {
