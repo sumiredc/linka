@@ -182,7 +182,9 @@ export type Resolution =
   /** どの種類にも当てはまらない */
   | { ok: false; reason: "noKind" }
   /** 対象がグラフに無い、または選ばれていない。`missing` は見つからなかった名前（選ばれていなければ空） */
-  | { ok: false; reason: "unknownTarget"; missing: string[] };
+  | { ok: false; reason: "unknownTarget"; missing: string[] }
+  /** ページの名前に当てはまるページが複数あり、どれか決められない */
+  | { ok: false; reason: "ambiguous"; matches: PageRef[] };
 
 const sameText = (text: string) => text.normalize("NFKC").trim().toLowerCase();
 
@@ -197,17 +199,37 @@ export function findConcept(name: string, concepts: readonly ConceptRef[]): Conc
   );
 }
 
+export type PageMatch =
+  | { kind: "found"; page: PageRef }
+  | { kind: "ambiguous"; matches: PageRef[] }
+  | { kind: "none" };
+
+/** プロンプトで題名を切り詰めたときの印。Nano が写してきたら取り除いてから探す */
+export const ELLIPSIS = "…";
+
+/** Nano が写した題名から、比べる文字列を作る。切り詰めの印と前後の空白は除く */
+export function pageSearchText(name: string): string {
+  return sameText(name.trim().replace(/…+$/u, ""));
+}
+
 /**
- * 名前を、題名が一致するページ、無ければ題名にその名前を含むただ 1 つのページに結びつける。
- * 含むページが複数あるときは、どれか決められないので null
+ * 名前を、題名が一致するただ 1 つのページ、無ければ題名にその名前を含むただ 1 つのページに結びつける。
+ * 当てはまるページが複数あるときは、同じ題名どうしでも推測で選ばない
  */
-export function findPage(name: string, pages: readonly PageRef[]): PageRef | null {
-  const wanted = sameText(name);
-  if (wanted === "") return null;
-  const exact = pages.find((page) => sameText(page.title) === wanted);
-  if (exact) return exact;
-  const containing = pages.filter((page) => sameText(page.title).includes(wanted));
-  return containing.length === 1 ? (containing[0] ?? null) : null;
+export function findPage(name: string, pages: readonly PageRef[]): PageMatch {
+  const wanted = pageSearchText(name);
+  if (wanted === "") return { kind: "none" };
+  const pick = (matches: PageRef[]): PageMatch | null => {
+    if (matches.length === 0) return null;
+    const [only] = matches;
+    return matches.length === 1 && only
+      ? { kind: "found", page: only }
+      : { kind: "ambiguous", matches };
+  };
+  return (
+    pick(pages.filter((page) => sameText(page.title) === wanted)) ??
+    pick(pages.filter((page) => sameText(page.title).includes(wanted))) ?? { kind: "none" }
+  );
 }
 
 function resolveConcepts(
@@ -239,12 +261,15 @@ export function resolveChoice(choice: QuestionChoice, candidates: Candidates): R
     case "threshold":
       return { ok: true, plan: { kind: "conceptsOnManyPages", moreThan: choice.moreThan } };
     case "page": {
-      const page = findPage(choice.page, candidates.pages);
-      if (!page) {
+      const match = findPage(choice.page, candidates.pages);
+      if (match.kind === "ambiguous") {
+        return { ok: false, reason: "ambiguous", matches: match.matches };
+      }
+      if (match.kind === "none") {
         const missing = choice.page.trim();
         return { ok: false, reason: "unknownTarget", missing: missing ? [missing] : [] };
       }
-      return { ok: true, plan: { kind: "pagesSolvingConcernsOfPage", page } };
+      return { ok: true, plan: { kind: "pagesSolvingConcernsOfPage", page: match.page } };
     }
     case "twoConcepts": {
       const resolved = resolveConcepts(choice.concepts, 2, candidates);
@@ -335,6 +360,49 @@ export const CANDIDATE_QUERIES = {
   },
 } satisfies Record<string, CypherStatement>;
 
+/** 同じ題名を含むページを、曖昧だと示すために並べる上限 */
+export const PAGE_MATCH_LIMIT = 20;
+
+/**
+ * Nano が選んだ対象を DB で探す文。プロンプトに入れた名前は上限で切っているので、
+ * 対象がグラフにあるかは候補の一覧ではなく DB に尋ねる。対象の要らない種類では null
+ */
+export function targetLookup(choice: QuestionChoice): CypherStatement | null {
+  if (choice.kind === "none") return null;
+  switch (KIND_SPECS[choice.kind].target) {
+    case "concept":
+    case "twoConcepts": {
+      const names = choice.concepts.map((name) => name.trim()).filter((name) => name !== "");
+      return {
+        query: [
+          "MATCH (c:Concept)",
+          "WHERE c.key IN $keys OR toLower(c.name) IN $names",
+          "RETURN c.key AS key, c.name AS name",
+          "LIMIT $limit",
+        ].join("\n"),
+        params: {
+          keys: names.map(normalizeConceptKey),
+          names: names.map((name) => name.toLowerCase()),
+          limit: 10,
+        },
+      };
+    }
+    case "page":
+      return {
+        query: [
+          "MATCH (p:Page)",
+          "WHERE toLower(p.title) CONTAINS $text",
+          "RETURN p.url AS url, p.title AS title",
+          "ORDER BY coalesce(p.clippedAt, '') DESC, p.url",
+          "LIMIT $limit",
+        ].join("\n"),
+        params: { text: pageSearchText(choice.page), limit: PAGE_MATCH_LIMIT },
+      };
+    default:
+      return null;
+  }
+}
+
 const textOf = (value: unknown): string | null =>
   typeof value === "string" && value.trim() !== "" ? value : null;
 
@@ -370,12 +438,16 @@ export type AskResult =
     }
   | {
       kind: "unanswerable";
-      reason: "noKind" | "unknownTarget" | "emptyGraph" | "tooLong";
+      reason: "noKind" | "unknownTarget" | "ambiguous" | "emptyGraph" | "tooLong";
       /** グラフに見つからなかった名前 */
       missing: string[];
+      /** ambiguous のとき、当てはまったページ */
+      matches: PageRef[];
       /** グラフにある概念の名前（案内に出す） */
       concepts: string[];
     }
+  /** ページの記憶の最中。抽出の後ろで待つと時間切れになりうるので、質問は受け付けない */
+  | { kind: "busy" }
   | {
       kind: "failed";
       /** model：Nano が使えない・時間切れ・答えの形が違う。query：問い合わせが失敗した */

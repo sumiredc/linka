@@ -7,12 +7,14 @@ import {
   findConcept,
   findPage,
   KIND_SPECS,
+  PAGE_MATCH_LIMIT,
   QUERY_KINDS,
   type QueryPlan,
   type QuestionChoice,
   QuestionChoiceSchema,
   RESULT_LIMIT,
   resolveChoice,
+  targetLookup,
 } from "./graph-question";
 import { detectWrite } from "./write-detection";
 
@@ -137,19 +139,80 @@ describe("findConcept", () => {
 
 describe("findPage", () => {
   it("matches the whole title, ignoring case", () => {
-    expect(findPage(localFirst.title.toUpperCase(), candidates.pages)).toEqual(localFirst);
+    expect(findPage(localFirst.title.toUpperCase(), candidates.pages)).toEqual({
+      kind: "found",
+      page: localFirst,
+    });
   });
 
   it("matches the only page whose title contains the name", () => {
-    expect(findPage("local-first software", candidates.pages)).toEqual(localFirst);
+    expect(findPage("local-first software", candidates.pages)).toEqual({
+      kind: "found",
+      page: localFirst,
+    });
   });
 
-  it("does not pick one of several pages whose titles contain the name", () => {
-    expect(findPage("local-first", [localFirst, localFirstNotes])).toBeNull();
+  it("matches a title shortened in the prompt, ignoring the ellipsis", () => {
+    expect(findPage("Local-first software: You own…", candidates.pages)).toEqual({
+      kind: "found",
+      page: localFirst,
+    });
   });
 
-  it("returns null for a page not in the graph", () => {
-    expect(findPage("SQLite on the web", candidates.pages)).toBeNull();
+  it("lists the pages when several titles contain the name", () => {
+    expect(findPage("local-first", [localFirst, localFirstNotes])).toEqual({
+      kind: "ambiguous",
+      matches: [localFirst, localFirstNotes],
+    });
+  });
+
+  it("does not guess between pages with the same title", () => {
+    const copy = { url: "https://mirror.example/local-first", title: localFirst.title };
+    expect(findPage(localFirst.title, [localFirst, copy])).toEqual({
+      kind: "ambiguous",
+      matches: [localFirst, copy],
+    });
+  });
+
+  it("prefers the one exact title over titles that only contain it", () => {
+    const longer = { url: "https://example.com/more", title: "About CRDTs and more" };
+    expect(findPage("About CRDTs", [...candidates.pages, longer])).toMatchObject({
+      kind: "found",
+      page: { url: "https://crdt.tech/" },
+    });
+  });
+
+  it("finds nothing for a page not in the graph", () => {
+    expect(findPage("SQLite on the web", candidates.pages)).toEqual({ kind: "none" });
+  });
+});
+
+describe("targetLookup", () => {
+  it("looks up concepts by key and by lowercased name", () => {
+    expect(
+      targetLookup(choice({ kind: "pagesMentioningBoth", concepts: ["Web Workers", " OPFS "] }))
+        ?.params,
+    ).toEqual({ keys: ["webworker", "opfs"], names: ["web workers", "opfs"], limit: 10 });
+  });
+
+  it("looks up pages by the title without the ellipsis", () => {
+    expect(
+      targetLookup(choice({ kind: "pagesSolvingConcernsOfPage", page: "Local-First Soft…" }))
+        ?.params,
+    ).toEqual({ text: "local-first soft", limit: PAGE_MATCH_LIMIT });
+  });
+
+  it("looks up nothing for kinds without a target", () => {
+    expect(targetLookup(choice({ kind: "claimCountsByType" }))).toBeNull();
+    expect(targetLookup(choice({ kind: "conceptsOnManyPages", moreThan: 2 }))).toBeNull();
+    expect(targetLookup(choice({ kind: "none" }))).toBeNull();
+  });
+
+  it("is read-only", () => {
+    for (const kind of ["relatedConcepts", "pagesSolvingConcernsOfPage"] as const) {
+      const lookup = targetLookup(choice({ kind, concepts: ["x"], page: "x" }));
+      expect(lookup && detectWrite(lookup.query)).toBeNull();
+    }
   });
 });
 
@@ -248,6 +311,16 @@ describe("resolveChoice", () => {
     expect(
       resolveChoice(choice({ kind: "pagesSolvingConcernsOfPage", page: "Yjs docs" }), candidates),
     ).toEqual({ ok: false, reason: "unknownTarget", missing: ["Yjs docs"] });
+  });
+
+  it("reports the matching pages when the page is ambiguous", () => {
+    const pages = [localFirst, localFirstNotes];
+    expect(
+      resolveChoice(choice({ kind: "pagesSolvingConcernsOfPage", page: "local-first" }), {
+        concepts: [],
+        pages,
+      }),
+    ).toEqual({ ok: false, reason: "ambiguous", matches: pages });
   });
 });
 

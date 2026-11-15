@@ -1,7 +1,9 @@
 // 質問の答え（UC3）を、サイドパネルの結果の一覧とグラフの強調にする
 import {
   type AnswerRow,
+  type AskResult,
   KIND_SPECS,
+  QUESTION_MAX_LENGTH,
   type QueryKind,
   type QueryPlan,
 } from "../shared/graph-question";
@@ -120,4 +122,25 @@ export function answerCells(kind: QueryKind, row: AnswerRow): AnswerCell[] {
       href: column === "page" && url && isOpenableUrl(url) ? url : null,
     };
   });
+}
+
+/** ページの記憶の最中に質問したときの案内 */
+export const BUSY_TEXT = "A page is being clipped. Ask again when it finishes.";
+
+/** 答えられなかった理由の案内。何も実行していないことも書く */
+export function unanswerableText(result: Extract<AskResult, { kind: "unanswerable" }>): string {
+  switch (result.reason) {
+    case "noKind":
+      return "Linka cannot turn this question into one of the queries it knows. Nothing was run.";
+    case "unknownTarget":
+      return result.missing.length > 0
+        ? `${result.missing.map((name) => `“${name}”`).join(" and ")} ${result.missing.length === 1 ? "is" : "are"} not in the graph. Nothing was run.`
+        : "Linka could not tell which concept or page the question is about. Nothing was run.";
+    case "ambiguous":
+      return `${result.matches.length} pages match the page in the question, so Linka did not pick one. Nothing was run. Ask again with more of the title:`;
+    case "emptyGraph":
+      return "The graph has no pages yet. Clip a page first.";
+    case "tooLong":
+      return `Questions can be up to ${QUESTION_MAX_LENGTH} characters.`;
+  }
 }

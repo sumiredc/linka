@@ -8,6 +8,7 @@ import {
   type QuestionChoice,
   RESULT_LIMIT,
   resolveChoice,
+  targetLookup,
   toConceptRefs,
   toPageRefs,
 } from "./graph-question";
@@ -22,6 +23,13 @@ const candidates: Candidates = {
   ),
   pages: toPageRefs(run(db, CANDIDATE_QUERIES.pages.query, CANDIDATE_QUERIES.pages.params).rows),
 };
+
+/** 対象を、本物の DB に {@link targetLookup} で尋ねて結びつける（offscreen document と同じ手順） */
+function resolveOnDb(picked: QuestionChoice) {
+  const lookup = targetLookup(picked);
+  const rows = lookup ? run(db, lookup.query, lookup.params).rows : [];
+  return resolveChoice(picked, { concepts: toConceptRefs(rows), pages: toPageRefs(rows) });
+}
 
 const choice = (fields: Partial<QuestionChoice>): QuestionChoice => ({
   kind: "none",
@@ -88,7 +96,7 @@ describe("query kinds on the demo graph", () => {
     it(`answers ${id} with the same rows as its reference query`, () => {
       const question = QUESTIONS.find((item) => item.id === id);
       if (!question) throw new Error(`${id} is missing`);
-      const resolved = resolveChoice(picked, candidates);
+      const resolved = resolveOnDb(picked);
       if (!resolved.ok) throw new Error(`${id} did not resolve: ${JSON.stringify(resolved)}`);
       const statement = buildQuery(resolved.plan);
 
@@ -113,6 +121,43 @@ describe("query kinds on the demo graph", () => {
     expect(run(db, statement.query, statement.params).rows.length).toBeLessThanOrEqual(
       RESULT_LIMIT,
     );
+  });
+
+  it("finds a concept that is in the graph but not among the prompt's candidates", () => {
+    const fewest = run(db, CANDIDATE_QUERIES.concepts.query, { limit: 1000 }).rows.at(-1);
+    const top = toConceptRefs(run(db, CANDIDATE_QUERIES.concepts.query, { limit: 1 }).rows);
+    const name = String(fewest?.name);
+    expect(top.map((concept) => concept.name)).not.toContain(name);
+    expect(
+      resolveOnDb(choice({ kind: "pagesMentioning", concepts: [name.toUpperCase()] })),
+    ).toMatchObject({ ok: true, plan: { concept: { name } } });
+  });
+
+  it("finds a page that is in the graph but not among the prompt's candidates", () => {
+    const oldest = run(db, CANDIDATE_QUERIES.pages.query, { limit: 1000 }).rows.at(-1);
+    const title = String(oldest?.title);
+    expect(resolveOnDb(choice({ kind: "pagesSolvingConcernsOfPage", page: title }))).toMatchObject({
+      ok: true,
+      plan: { page: { title } },
+    });
+  });
+
+  it("lists every page that matches an ambiguous page name", () => {
+    const resolved = resolveOnDb(
+      choice({ kind: "pagesSolvingConcernsOfPage", page: "web apis | mdn" }),
+    );
+    expect(resolved).toMatchObject({ ok: false, reason: "ambiguous" });
+    if (resolved.ok || resolved.reason !== "ambiguous") return;
+    expect(resolved.matches.length).toBeGreaterThan(1);
+    for (const page of resolved.matches) expect(page.title).toContain("Web APIs | MDN");
+  });
+
+  it("reports a concept that is not in the graph", () => {
+    expect(resolveOnDb(choice({ kind: "relatedConcepts", concepts: ["Kubernetes"] }))).toEqual({
+      ok: false,
+      reason: "unknownTarget",
+      missing: ["Kubernetes"],
+    });
   });
 
   it("reads every concept and page as a candidate", () => {

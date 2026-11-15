@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { answerCells, answerHighlight, isOpenableUrl } from "./answer-view";
+import { answerCells, answerHighlight, isOpenableUrl, unanswerableText } from "./answer-view";
 
 describe("answerCells", () => {
   it("shows only the visible columns, linking the page to its URL", () => {
@@ -55,5 +55,23 @@ describe("answerHighlight", () => {
     );
     expect([...highlight.nodes]).toEqual(["page:https://a.example/", "concept:opfs"]);
     expect([...highlight.links]).toEqual(["page:https://a.example/|MENTIONS|concept:opfs"]);
+  });
+});
+
+describe("unanswerableText", () => {
+  const base = { kind: "unanswerable" as const, missing: [], matches: [], concepts: [] };
+
+  it("says how many pages matched an ambiguous page name", () => {
+    const matches = [
+      { url: "https://a.example/", title: "Notes" },
+      { url: "https://b.example/", title: "Notes" },
+    ];
+    expect(unanswerableText({ ...base, reason: "ambiguous", matches })).toContain("2 pages match");
+  });
+
+  it("names the concepts that are not in the graph", () => {
+    expect(unanswerableText({ ...base, reason: "unknownTarget", missing: ["SQLite"] })).toBe(
+      "“SQLite” is not in the graph. Nothing was run.",
+    );
   });
 });
