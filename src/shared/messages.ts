@@ -38,7 +38,9 @@ export type DbFailureKind =
   | "restarting"
   | "unavailable"
   /** offscreen document を用意できなかった、または依頼が届かなかった */
-  | "unreachable";
+  | "unreachable"
+  /** ページの記憶の最中なので、グラフを置き換える依頼（Reset to demo data）を実行せずに断った */
+  | "busy";
 
 export type DbFailure = { ok: false; error: { kind: DbFailureKind; message: string } };
 
