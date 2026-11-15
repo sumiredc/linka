@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "description": "Clip what you read in Chrome into a local knowledge graph, then hand that context to your coding agent.",
   "minimum_chrome_version": "138",
-  "permissions": ["sidePanel", "offscreen", "activeTab", "scripting", "storage"],
+  "permissions": ["sidePanel", "offscreen", "activeTab", "scripting", "storage", "tabs"],
   "background": { "service_worker": "background.js", "type": "module" },
   "action": {
     "default_popup": "popup.html",

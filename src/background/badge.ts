@@ -1,0 +1,72 @@
+// ツールバーのアイコンに付ける、記憶済みのページの印（PRD UC1）。どのタブにどの印を付けるかを決める
+import { unreadableUrlReason } from "../content/unreadable-url";
+import { type ClippedPage, pageUrlOf } from "../shared/clip-status";
+import type { DbResponse } from "../shared/messages";
+import { samplePageOf } from "../shared/sample-page";
+
+export type Badge = { text: string; color: string };
+
+/** 記憶済みの印。色はモックの `#action-btn[data-state="saved"]`（--solution） */
+export const CLIPPED_BADGE: Badge = { text: "✓", color: "#157a6e" };
+export const NO_BADGE: Badge = { text: "", color: "#157a6e" };
+
+export type TabLike = { id?: number; url?: string };
+
+/**
+ * 記憶済みかを尋ねる価値のあるタブの URL か。chrome:// などは記憶できないので、
+ * 尋ねずに印を消す（offscreen document を起こさない）
+ */
+export function canBeClipped(tabUrl: string, extensionRoot: string): boolean {
+  if (samplePageOf(tabUrl, extensionRoot)) return true;
+  // file:// は読めるかどうかを尋ねずに分からないが、記憶済みなら印を付けたいので尋ねる
+  return unreadableUrlReason(tabUrl, true) === null;
+}
+
+/** isClipped の返事を印にする。返事が失敗なら null（今の印を変えない） */
+export function badgeOf(response: DbResponse<ClippedPage | null>): Badge | null {
+  if (!response.ok) return null;
+  return response.value === null ? NO_BADGE : CLIPPED_BADGE;
+}
+
+/** 記憶が終わったページ（Page の URL）を表示しているタブ */
+export function tabsShowing(
+  tabs: TabLike[],
+  pageUrl: string,
+  extensionRoot: string,
+): { id: number; url: string }[] {
+  return tabs.flatMap(({ id, url }) =>
+    id !== undefined && url !== undefined && pageUrlOf(url, extensionRoot) === pageUrl
+      ? [{ id, url }]
+      : [],
+  );
+}
+
+export type BadgeRefresherOptions = {
+  extensionRoot: string;
+  isClipped(tabUrl: string): Promise<DbResponse<ClippedPage | null>>;
+  setBadge(tabId: number, badge: Badge): Promise<void>;
+};
+
+/**
+ * タブの印を、今の URL が記憶済みかどうかに合わせる関数を返す。
+ * 同じタブで続けて移動すると返事の順が入れ替わりうるので、そのタブで最後に頼んだ分だけを反映する
+ */
+export function createBadgeRefresher(options: BadgeRefresherOptions) {
+  let sequence = 0;
+  const latest = new Map<number, number>();
+  return async function refreshBadge(tabId: number, tabUrl: string | undefined): Promise<void> {
+    sequence += 1;
+    const mine = sequence;
+    latest.set(tabId, mine);
+    try {
+      const badge =
+        tabUrl !== undefined && canBeClipped(tabUrl, options.extensionRoot)
+          ? badgeOf(await options.isClipped(tabUrl))
+          : NO_BADGE;
+      if (badge === null || latest.get(tabId) !== mine) return;
+      await options.setBadge(tabId, badge);
+    } finally {
+      if (latest.get(tabId) === mine) latest.delete(tabId);
+    }
+  };
+}
