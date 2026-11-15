@@ -11,7 +11,8 @@ import { PanelMenu, ResetDialog } from "./PanelMenu";
 import styles from "./SidePanel.module.css";
 import { useGraphView, useModelStatus, useStorage } from "./use-panel-data";
 
-type Notice = { tone: "ok" | "warn" | "bad"; text: string };
+/** retry が true なら、グラフを読み直すボタンを付ける */
+type Notice = { tone: "ok" | "warn" | "bad"; text: string; retry?: boolean };
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
@@ -23,7 +24,7 @@ function storageNotice(storage: StorageState | null): Notice | null {
     };
   }
   if (storage?.kind === "unavailable") {
-    return { tone: "bad", text: `The graph cannot be opened: ${storage.reason}` };
+    return { tone: "bad", text: `The graph cannot be opened: ${storage.reason}`, retry: true };
   }
   return null;
 }
@@ -119,7 +120,11 @@ export function SidePanel() {
   const notices = [
     storageNotice(storage),
     graph.kind === "failed" && storage?.kind !== "unavailable"
-      ? { tone: "bad" as const, text: `The graph could not be read: ${graph.message}` }
+      ? {
+          tone: "bad" as const,
+          text: `The graph could not be read: ${graph.message}`,
+          retry: true,
+        }
       : null,
     notice,
   ].filter((item): item is Notice => item !== null);
@@ -163,6 +168,14 @@ export function SidePanel() {
         {notices.map((item) => (
           <p key={item.text} className={`${styles.notice} ${styles[item.tone]}`}>
             {item.text}
+            {item.retry && (
+              <>
+                {" "}
+                <button type="button" className={styles.linkish} onClick={reload}>
+                  Retry
+                </button>
+              </>
+            )}
           </p>
         ))}
         {model?.kind === "unavailable" && (

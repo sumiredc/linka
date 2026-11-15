@@ -1,75 +1,36 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { askDb, onDbNotification } from "../shared/db";
 import type { StorageState } from "../shared/messages";
 import { askModel, onModelStatus } from "../shared/model";
 import type { ModelStatus } from "../shared/model-status";
-import { GRAPH_VIEW_PARAMS, GRAPH_VIEW_SCRIPT, type GraphView, toGraphView } from "./graph-view";
+import { type GraphState, startGraphLoader, watchLatest } from "./panel-data";
 
-export type GraphState =
-  | { kind: "loading" }
-  | { kind: "ready"; view: GraphView }
-  | { kind: "failed"; message: string; view: GraphView | null };
+export type { GraphState } from "./panel-data";
 
-/** グラフを読み、`graphChanged` の通知のたびに読み直す。重なったときは最後に頼んだ結果だけを使う */
+/** グラフを読み、`graphChanged` と、ストアが開けたときの `storageChanged` で読み直す */
 export function useGraphView(): { graph: GraphState; reload(): void } {
   const [graph, setGraph] = useState<GraphState>({ kind: "loading" });
-  const latest = useRef(0);
-
-  const reload = useCallback(() => {
-    const ticket = ++latest.current;
-    void askDb({
-      kind: "executeScript",
-      script: GRAPH_VIEW_SCRIPT,
-      params: GRAPH_VIEW_PARAMS,
-    }).then((response) => {
-      if (ticket !== latest.current) return;
-      if (response.ok) {
-        setGraph({ kind: "ready", view: toGraphView(response.value) });
-      } else {
-        setGraph((previous) => ({
-          kind: "failed",
-          message: response.error.message,
-          view: previous.kind === "loading" ? null : previous.view,
-        }));
-      }
-    });
-  }, []);
+  const loader = useRef<{ reload(): void } | null>(null);
 
   useEffect(() => {
-    const stop = onDbNotification((notification) => {
-      if (notification.type === "graphChanged") reload();
+    const started = startGraphLoader({
+      readGraph: askDb,
+      subscribe: onDbNotification,
+      onState: setGraph,
     });
-    reload();
-    return stop;
-  }, [reload]);
+    loader.current = started;
+    return started.stop;
+  }, []);
 
-  return { graph, reload };
+  return { graph, reload: () => loader.current?.reload() };
 }
 
-/**
- * 通知を先に受け始めてから、今の値を尋ねる。尋ねた返事より先に通知が届いていたら、
- * 返事のほうが古いので捨てる
- */
 function useLatest<T>(
   subscribe: (listener: (value: T) => void) => () => void,
   ask: () => Promise<T | null>,
 ): T | null {
   const [value, setValue] = useState<T | null>(null);
-  useEffect(() => {
-    let notified = false;
-    let active = true;
-    const stop = subscribe((next) => {
-      notified = true;
-      setValue(next);
-    });
-    void ask().then((answer) => {
-      if (active && !notified && answer !== null) setValue(answer);
-    });
-    return () => {
-      active = false;
-      stop();
-    };
-  }, [subscribe, ask]);
+  useEffect(() => watchLatest({ subscribe, ask, onValue: setValue }), [subscribe, ask]);
   return value;
 }
 
