@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EXTRACTION_LIMITS, type Extraction, ExtractionSchema } from "./extraction";
-import { mergeExtractions } from "./merge-extractions";
+import { mergeExtractions, UNLISTED_CATEGORY } from "./merge-extractions";
 
 const empty: Extraction = {
   summary: "",
@@ -60,10 +60,7 @@ describe("mergeExtractions", () => {
 
   it("merges claims with the same statement up to whitespace and joins their concepts", () => {
     const merged = mergeExtractions([
-      part({
-        concepts: listed("OPFS", "SQLite"),
-        claims: [{ statement: "OPFS is fast.", type: "benefit", concepts: ["OPFS"] }],
-      }),
+      part({ claims: [{ statement: "OPFS is fast.", type: "benefit", concepts: ["OPFS"] }] }),
       part({
         claims: [{ statement: " OPFS  is fast. ", type: "fact", concepts: ["opfs", "SQLite"] }],
       }),
@@ -96,10 +93,7 @@ describe("mergeExtractions", () => {
 
   it("treats related concept pairs as undirected and drops a concept related to itself", () => {
     const merged = mergeExtractions([
-      part({
-        concepts: listed("OPFS", "SQLite", "WebAssembly"),
-        relatedConcepts: [{ from: "OPFS", to: "SQLite" }],
-      }),
+      part({ relatedConcepts: [{ from: "OPFS", to: "SQLite" }] }),
       part({
         relatedConcepts: [
           { from: "sqlite", to: "opfs" },
@@ -176,7 +170,7 @@ describe("mergeExtractions", () => {
     expect(unlistedReferences(merged)).toEqual([]);
   });
 
-  it("drops references to concepts that no chunk lists, and relations that lose an end", () => {
+  it("keeps a concept that is referenced but not listed, with the category for unlisted concepts", () => {
     const merged = mergeExtractions([
       part({
         concepts: listed("OPFS"),
@@ -184,8 +178,55 @@ describe("mergeExtractions", () => {
         relatedConcepts: [{ from: "OPFS", to: "SQLite" }],
       }),
     ]);
-    expect(merged.claims[0]?.concepts).toEqual(["OPFS"]);
+    expect(merged.concepts).toEqual([
+      { name: "OPFS", category: "topic" },
+      { name: "SQLite", category: UNLISTED_CATEGORY },
+    ]);
+    expect(merged.claims[0]?.concepts).toEqual(["OPFS", "SQLite"]);
+    expect(merged.relatedConcepts).toEqual([{ from: "OPFS", to: "SQLite" }]);
+  });
+
+  it("uses the listed name and category when another chunk only refers to the concept", () => {
+    const merged = mergeExtractions([
+      part({ claims: [{ statement: "Wasm is fast.", type: "fact", concepts: ["wasm"] }] }),
+      part({ concepts: [{ name: "WebAssembly", category: "runtime" }] }),
+    ]);
+    expect(merged.concepts).toEqual([{ name: "WebAssembly", category: "runtime" }]);
+  });
+
+  it("ranks unlisted concepts together with listed ones when there are more than the limit", () => {
+    const names = Array.from({ length: EXTRACTION_LIMITS.concepts }, (_, i) => `L${i}`);
+    const merged = mergeExtractions([
+      part({
+        concepts: listed(...names),
+        claims: [{ statement: "U matters.", type: "fact", concepts: ["U"] }],
+      }),
+    ]);
+    expect(merged.concepts).toHaveLength(EXTRACTION_LIMITS.concepts);
+    expect(merged.concepts[0]).toEqual({ name: "U", category: UNLISTED_CATEGORY });
+    expect(merged.concepts.map((c) => c.name)).not.toContain(`L${EXTRACTION_LIMITS.concepts - 1}`);
+  });
+
+  it("drops references to concepts cut by the limit, and relations that lose an end", () => {
+    const pairs = (prefix: string) =>
+      Array.from({ length: 11 }, (_, i) => [`${prefix}${2 * i}`, `${prefix}${2 * i + 1}`]);
+    const merged = mergeExtractions([
+      part({
+        claims: pairs("K").map((concepts, i) => ({
+          statement: `Claim ${i}.`,
+          type: "fact" as const,
+          concepts,
+        })),
+        relatedConcepts: pairs("R").map(([from = "", to = ""]) => ({ from, to })),
+      }),
+    ]);
+    // どれも 1 回ずつの参照なので、最初に参照された K0〜K19 が残る
+    expect(merged.concepts.map((c) => c.name)).toEqual(
+      Array.from({ length: EXTRACTION_LIMITS.concepts }, (_, i) => `K${i}`),
+    );
+    expect(merged.claims.at(-1)?.concepts).toEqual([]);
     expect(merged.relatedConcepts).toEqual([]);
+    expect(unlistedReferences(merged)).toEqual([]);
   });
 
   it("keeps at most the per-claim limit of concepts when one claim is merged from two chunks", () => {
