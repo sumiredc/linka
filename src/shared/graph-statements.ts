@@ -224,6 +224,112 @@ export interface AddressesLink {
   concern: string;
 }
 
+/** UC2 で判定する組の数の上限（PRD UC2）。新しいページの Claim 1 つにつき、と記憶 1 回の合計 */
+export const CANDIDATE_LIMITS = { perClaim: 5, total: 10 } as const;
+
+/** ADDRESSES の片端の Claim と、それを ASSERTS するページ */
+export type ConnectionEnd = { id: string; statement: string; pageUrl: string; pageTitle: string };
+
+/** 判定する組。`concepts` は両方の Claim が ABOUT で指す Concept の名前 */
+export type AddressesCandidate = {
+  solution: ConnectionEnd;
+  concern: ConnectionEnd;
+  concepts: string[];
+};
+
+/** 組の両端の列。候補を集める文とつながりを読む文で同じ列名にする */
+const PAIR_COLUMNS = [
+  "s.id AS solution, s.statement AS solutionStatement, sp.url AS solutionPage, sp.title AS solutionTitle,",
+  "c.id AS concern, c.statement AS concernStatement, cp.url AS concernPage, cp.title AS concernTitle",
+].join("\n");
+
+/**
+ * UC2 で判定する組を集める文。そのページの solution と別のページの concern、そのページの concern と別のページの solution で、
+ * 同じ Concept を ABOUT で指すものを集める。すでに ADDRESSES がある組は除く。
+ * 共有する Concept の多い組から、ページの Claim 1 つにつき `perClaim` 組、合わせて `total` 組まで返す
+ */
+export function buildAddressesCandidatesStatement(
+  pageUrl: string,
+  limits: { perClaim: number; total: number } = CANDIDATE_LIMITS,
+): CypherStatement {
+  return {
+    query: [
+      "MATCH (p:Page {url: $url})-[:ASSERTS]->(n:Claim)-[:ABOUT]->(k:Concept)<-[:ABOUT]-(o:Claim)<-[:ASSERTS]-(op:Page)",
+      "WHERE op.url <> $url",
+      "  AND ((n.type = 'solution' AND o.type = 'concern') OR (n.type = 'concern' AND o.type = 'solution'))",
+      "WITH p, n, o, op, collect(DISTINCT k.name) AS concepts",
+      "WITH n, concepts,",
+      "  CASE WHEN n.type = 'solution' THEN n ELSE o END AS s, CASE WHEN n.type = 'solution' THEN p ELSE op END AS sp,",
+      "  CASE WHEN n.type = 'solution' THEN o ELSE n END AS c, CASE WHEN n.type = 'solution' THEN op ELSE p END AS cp,",
+      "  o.id AS other",
+      // Relate 1.0.1 では、同じ WITH で付けた名前をパターンの条件から参照できないので、WITH を分ける
+      "WITH n, s, sp, c, cp, concepts, other",
+      "WHERE NOT (s)-[:ADDRESSES]->(c)",
+      "WITH n, s, sp, c, cp, concepts ORDER BY size(concepts) DESC, other",
+      "WITH n, collect({s: s, sp: sp, c: c, cp: cp, concepts: concepts})[0..$perClaim] AS picked",
+      "UNWIND picked AS pair",
+      "WITH n, pair ORDER BY size(pair.concepts) DESC, n.id, pair.c.id, pair.s.id",
+      "LIMIT $total",
+      "WITH pair.s AS s, pair.sp AS sp, pair.c AS c, pair.cp AS cp, pair.concepts AS concepts",
+      `RETURN ${PAIR_COLUMNS}, concepts`,
+    ].join("\n"),
+    params: { url: normalizeUrl(pageUrl), perClaim: limits.perClaim, total: limits.total },
+  };
+}
+
+function connectionEnd(
+  row: Record<string, unknown>,
+  side: "solution" | "concern",
+): ConnectionEnd | null {
+  const id = row[side];
+  const statement = row[`${side}Statement`];
+  const pageUrl = row[`${side}Page`];
+  const pageTitle = row[`${side}Title`];
+  if (typeof id !== "string" || typeof statement !== "string" || typeof pageUrl !== "string") {
+    return null;
+  }
+  return { id, statement, pageUrl, pageTitle: typeof pageTitle === "string" ? pageTitle : pageUrl };
+}
+
+/** {@link buildAddressesCandidatesStatement} と {@link buildConnectionsStatement} の行を組にする。形の違う行は飛ばす */
+export function toAddressesCandidates(
+  rows: readonly Record<string, unknown>[],
+): AddressesCandidate[] {
+  return rows.flatMap((row) => {
+    const solution = connectionEnd(row, "solution");
+    const concern = connectionEnd(row, "concern");
+    if (!solution || !concern) return [];
+    const concepts = Array.isArray(row.concepts)
+      ? row.concepts.filter((name): name is string => typeof name === "string")
+      : [];
+    return [{ solution, concern, concepts }];
+  });
+}
+
+/** 与えた組のうち、グラフに ADDRESSES があるものを、両端の文とページとともに読む文 */
+export function buildConnectionsStatement(links: readonly AddressesLink[]): CypherStatement {
+  return {
+    query: [
+      "UNWIND $links AS link",
+      "MATCH (sp:Page)-[:ASSERTS]->(s:Claim {id: link.solution})-[:ADDRESSES]->(c:Claim {id: link.concern})<-[:ASSERTS]-(cp:Page)",
+      `RETURN DISTINCT ${PAIR_COLUMNS}`,
+    ].join("\n"),
+    params: { links: links.map(({ solution, concern }) => ({ solution, concern })) },
+  };
+}
+
+/** 与えた組の ADDRESSES を消す文。UC2 で張りかけたつながりを書き込みの失敗で戻すのに使う */
+export function buildRemoveAddressesStatement(links: readonly AddressesLink[]): CypherStatement {
+  return {
+    query: [
+      "UNWIND $links AS link",
+      "MATCH (:Claim {id: link.solution})-[r:ADDRESSES]->(:Claim {id: link.concern})",
+      "DELETE r",
+    ].join("\n"),
+    params: { links: links.map(({ solution, concern }) => ({ solution, concern })) },
+  };
+}
+
 /**
  * ADDRESSES を張る文。種類が solution → concern で、別々のページの Claim の組にだけ張る（PRD §5）。
  * 条件に合わない組は黙って飛ばす。
