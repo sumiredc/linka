@@ -1,4 +1,11 @@
+import type { AskResult } from "../shared/graph-question";
+import type { DbResponse } from "../shared/messages";
 import type { ModelStatus } from "../shared/model-status";
+
+export type AskState =
+  | { kind: "idle" }
+  | { kind: "asking"; question: string }
+  | { kind: "done"; question: string; response: DbResponse<AskResult> };
 
 /** 質問の入力欄で押されたキーのうち、送信を決めるのに見る部分（KeyboardEvent と React の両方が持つ） */
 export type SubmitKey = {
@@ -45,4 +52,15 @@ export function askGate(
         text: `Questions need on-device AI (Gemini Nano), which is not available here: ${status.reason}.`,
       };
   }
+}
+
+/**
+ * 質問の状態が変わったあとの入力欄の文。答えが出たら空にする（答えの欄に質問が残る）。
+ * 答えの前に終わったとき（記憶の最中・時間切れ・失敗・取り消し）は、そのまま送り直せるように残す。
+ * 待つあいだに書き換えた文は、送った質問ではないので消さない
+ */
+export function textAfterAsk(text: string, state: AskState): string {
+  const answered =
+    state.kind === "done" && state.response.ok && state.response.value.kind === "answer";
+  return answered && text.trim() === state.question ? "" : text;
 }

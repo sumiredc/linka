@@ -435,6 +435,8 @@ export type AskResult =
       rows: AnswerRow[];
       /** 結果が {@link RESULT_LIMIT} 件に届いた（もっとあるかもしれない） */
       truncated: boolean;
+      /** グラフにある概念の名前（結果が 0 件のときの案内に出す） */
+      concepts: string[];
     }
   | {
       kind: "unanswerable";

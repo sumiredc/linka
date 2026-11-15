@@ -3,6 +3,7 @@ import {
   type AnswerRow,
   type AskResult,
   KIND_SPECS,
+  QUERY_KINDS,
   QUESTION_MAX_LENGTH,
   type QueryKind,
   type QueryPlan,
@@ -122,6 +123,24 @@ export function answerCells(kind: QueryKind, row: AnswerRow): AnswerCell[] {
       href: column === "page" && url && isOpenableUrl(url) ? url : null,
     };
   });
+}
+
+export type QuestionGuide = { examples: string[]; concepts: string[] };
+
+/**
+ * 答えられる質問の案内（質問の例とグラフにある概念）。質問がどの問い合わせにも当てはまらないか対象が無いとき、
+ * および問い合わせの結果が 0 件のときに出す。漠然とした質問が、あるが中身の無い概念に当たっても案内で終わるようにする
+ */
+export function questionGuide(result: AskResult): QuestionGuide | null {
+  const show =
+    (result.kind === "answer" && result.rows.length === 0) ||
+    (result.kind === "unanswerable" &&
+      (result.reason === "noKind" || result.reason === "unknownTarget"));
+  if (!show) return null;
+  return {
+    examples: QUERY_KINDS.map((kind) => KIND_SPECS[kind].example),
+    concepts: result.concepts,
+  };
 }
 
 /** ページの記憶の最中に質問したときの案内 */

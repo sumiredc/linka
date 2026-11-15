@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { answerCells, answerHighlight, isOpenableUrl, unanswerableText } from "./answer-view";
+import { type AskResult, KIND_SPECS, QUERY_KINDS } from "../shared/graph-question";
+import {
+  answerCells,
+  answerHighlight,
+  isOpenableUrl,
+  questionGuide,
+  unanswerableText,
+} from "./answer-view";
 
 describe("answerCells", () => {
   it("shows only the visible columns, linking the page to its URL", () => {
@@ -74,4 +81,44 @@ describe("unanswerableText", () => {
       "“SQLite” is not in the graph. Nothing was run.",
     );
   });
+});
+
+describe("questionGuide", () => {
+  const concepts = ["Persistent storage", "OPFS"];
+  const answer = (rows: Record<string, unknown>[]): AskResult => ({
+    kind: "answer",
+    plan: {
+      kind: "concernsAbout",
+      concept: { key: "persistentstorage", name: "Persistent storage" },
+    },
+    title: "Concerns about Persistent storage",
+    cypher: "MATCH ...",
+    columns: ["concern", "page"],
+    rows,
+    truncated: false,
+    concepts,
+  });
+  const unanswerable = (
+    reason: Extract<AskResult, { kind: "unanswerable" }>["reason"],
+  ): AskResult => ({ kind: "unanswerable", reason, missing: [], matches: [], concepts });
+  const guide = { examples: QUERY_KINDS.map((kind) => KIND_SPECS[kind].example), concepts };
+
+  it("guides to answerable questions when the query matched nothing", () => {
+    expect(questionGuide(answer([]))).toEqual(guide);
+  });
+
+  it("does not guide when the query has results", () => {
+    expect(questionGuide(answer([{ concern: "Quota is small.", page: "Storage" }]))).toBeNull();
+  });
+
+  it.each(["noKind", "unknownTarget"] as const)("guides when the question is %s", (reason) => {
+    expect(questionGuide(unanswerable(reason))).toEqual(guide);
+  });
+
+  it.each(["ambiguous", "emptyGraph", "tooLong"] as const)(
+    "does not guide when the question is %s",
+    (reason) => {
+      expect(questionGuide(unanswerable(reason))).toBeNull();
+    },
+  );
 });

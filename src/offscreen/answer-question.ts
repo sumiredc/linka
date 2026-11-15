@@ -266,6 +266,7 @@ export class GraphQuestions {
         columns: result.value.columns,
         rows: result.value.rows,
         truncated: result.value.rows.length >= RESULT_LIMIT,
+        concepts: conceptNames,
       },
     };
   }

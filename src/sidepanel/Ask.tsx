@@ -1,13 +1,7 @@
 // グラフへの質問（PRD UC3）。入力欄はパネルの下に固定し、答えは文脈の欄に出す
-import { type FormEvent, useMemo, useRef, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { askGraph } from "../shared/ask";
-import {
-  type AskResult,
-  KIND_SPECS,
-  QUERY_KINDS,
-  QUESTION_MAX_LENGTH,
-  RESULT_LIMIT,
-} from "../shared/graph-question";
+import { type AskResult, QUESTION_MAX_LENGTH, RESULT_LIMIT } from "../shared/graph-question";
 import type { DbResponse } from "../shared/messages";
 import type { ModelStatus } from "../shared/model-status";
 import styles from "./Ask.module.css";
@@ -16,14 +10,10 @@ import {
   answerHighlight,
   BUSY_TEXT,
   type Highlight,
+  questionGuide,
   unanswerableText,
 } from "./answer-view";
-import { askGate, shouldSubmit } from "./ask-input";
-
-export type AskState =
-  | { kind: "idle" }
-  | { kind: "asking"; question: string }
-  | { kind: "done"; question: string; response: DbResponse<AskResult> };
+import { type AskState, askGate, shouldSubmit, textAfterAsk } from "./ask-input";
 
 /** 質問の状態と、答えに含まれるノードと線（強調に使う） */
 export function useAsk() {
@@ -53,16 +43,25 @@ export function useAsk() {
 
 export function AskForm({
   model,
-  busy,
+  state,
   onAsk,
 }: {
   model: ModelStatus | null;
-  busy: boolean;
+  state: AskState;
   onAsk(question: string): void;
 }) {
   const [text, setText] = useState("");
   const input = useRef<HTMLTextAreaElement>(null);
   const gate = askGate(model);
+  const busy = state.kind === "asking";
+
+  useEffect(() => {
+    setText((current) => textAfterAsk(current, state));
+  }, [state]);
+  // 空にしたら、書いた分だけ伸ばした高さも戻す
+  useEffect(() => {
+    if (text === "" && input.current) input.current.style.height = "";
+  }, [text]);
 
   if (!gate.open) {
     return (
@@ -156,12 +155,31 @@ function Cypher({ text, label }: { text: string; label: string }) {
   );
 }
 
-function Unanswerable({ result }: { result: Extract<AskResult, { kind: "unanswerable" }> }) {
-  const text = unanswerableText(result);
-  const guide = result.reason === "noKind" || result.reason === "unknownTarget";
+function Guide({ result }: { result: AskResult }) {
+  const guide = questionGuide(result);
+  if (!guide) return null;
   return (
     <>
-      <p className={`${styles.notice} ${styles.warn}`}>{text}</p>
+      <p className={styles.muted}>Questions Linka can answer, with a concept from your graph:</p>
+      <ul className={styles.examples}>
+        {guide.examples.map((example) => (
+          <li key={example}>{example}</li>
+        ))}
+      </ul>
+      {guide.concepts.length > 0 && (
+        <p className={styles.concepts}>
+          <span className={styles.label}>Concepts in the graph</span>
+          {guide.concepts.join(", ")}
+        </p>
+      )}
+    </>
+  );
+}
+
+function Unanswerable({ result }: { result: Extract<AskResult, { kind: "unanswerable" }> }) {
+  return (
+    <>
+      <p className={`${styles.notice} ${styles.warn}`}>{unanswerableText(result)}</p>
       {result.reason === "ambiguous" && (
         <ul className={styles.examples}>
           {result.matches.map((page) => (
@@ -171,24 +189,7 @@ function Unanswerable({ result }: { result: Extract<AskResult, { kind: "unanswer
           ))}
         </ul>
       )}
-      {guide && (
-        <>
-          <p className={styles.muted}>
-            Questions Linka can answer, with a concept from your graph:
-          </p>
-          <ul className={styles.examples}>
-            {QUERY_KINDS.map((kind) => (
-              <li key={kind}>{KIND_SPECS[kind].example}</li>
-            ))}
-          </ul>
-          {result.concepts.length > 0 && (
-            <p className={styles.concepts}>
-              <span className={styles.label}>Concepts in the graph</span>
-              {result.concepts.join(", ")}
-            </p>
-          )}
-        </>
-      )}
+      <Guide result={result} />
     </>
   );
 }
@@ -198,7 +199,10 @@ function Answer({ result }: { result: Extract<AskResult, { kind: "answer" }> }) 
     <>
       <Cypher label="Executed Cypher" text={result.cypher} />
       {result.rows.length === 0 ? (
-        <p className={styles.muted}>No matching results.</p>
+        <>
+          <p className={styles.muted}>No matching results.</p>
+          <Guide result={result} />
+        </>
       ) : (
         <>
           <ul className={styles.results}>

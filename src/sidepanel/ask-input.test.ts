@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { askGate, type SubmitKey, shouldSubmit } from "./ask-input";
+import type { AskResult } from "../shared/graph-question";
+import { failure } from "../shared/messages";
+import { type AskState, askGate, type SubmitKey, shouldSubmit, textAfterAsk } from "./ask-input";
 
 const key = (fields: Partial<SubmitKey>): SubmitKey => ({
   key: "Enter",
@@ -64,5 +66,64 @@ describe("askGate", () => {
 
   it("keeps the input closed while the status is unknown", () => {
     expect(askGate(null)).toMatchObject({ open: false });
+  });
+});
+
+describe("textAfterAsk", () => {
+  const question = "Which pages mention OPFS?";
+  const done = (value: AskResult): AskState => ({
+    kind: "done",
+    question,
+    response: { ok: true, value },
+  });
+  const answered = done({
+    kind: "answer",
+    plan: { kind: "pagesMentioning", concept: { key: "opfs", name: "OPFS" } },
+    title: "Pages that mention OPFS",
+    cypher: "MATCH ...",
+    columns: ["page", "url"],
+    rows: [],
+    truncated: false,
+    concepts: ["OPFS"],
+  });
+
+  it("clears the question once it is answered", () => {
+    expect(textAfterAsk(question, answered)).toBe("");
+  });
+
+  it("clears the question when only surrounding spaces differ from what was sent", () => {
+    expect(textAfterAsk(`  ${question}\n`, answered)).toBe("");
+  });
+
+  it("keeps text written while waiting, which is not the question that was answered", () => {
+    expect(textAfterAsk("Which pages mention Web Worker?", answered)).toBe(
+      "Which pages mention Web Worker?",
+    );
+  });
+
+  it("keeps the question while it is being asked", () => {
+    expect(textAfterAsk(question, { kind: "asking", question })).toBe(question);
+  });
+
+  it("keeps the question when the ask is cancelled", () => {
+    expect(textAfterAsk(question, { kind: "idle" })).toBe(question);
+  });
+
+  it.each<[string, AskState]>([
+    ["a page is being clipped", done({ kind: "busy" })],
+    [
+      "the answer timed out",
+      { kind: "done", question, response: failure("timeout", "no answer within 180 s") },
+    ],
+    [
+      "the query failed",
+      done({ kind: "failed", stage: "query", message: "boom", cypher: "MATCH ..." }),
+    ],
+    [
+      "the question cannot be answered",
+      done({ kind: "unanswerable", reason: "tooLong", missing: [], matches: [], concepts: [] }),
+    ],
+  ])("keeps the question when %s", (_, state) => {
+    expect(textAfterAsk(question, state)).toBe(question);
   });
 });
