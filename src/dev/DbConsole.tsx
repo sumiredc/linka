@@ -37,6 +37,17 @@ export function DbConsole() {
             onClick={async () => setResponse(await askDb({ kind: "status" }))}
           >
             保存先
+          </button>{" "}
+          <button
+            id="reset"
+            type="button"
+            onClick={async () => {
+              if (!window.confirm("グラフをすべて消して、デモデータに戻します")) return;
+              setResponse(null);
+              setResponse(await askDb({ kind: "resetToDemo" }));
+            }}
+          >
+            デモデータに戻す
           </button>
         </div>
       </form>
