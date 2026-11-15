@@ -47,7 +47,7 @@ Linka は、読んだページから概念・主張（課題・解決策など�
 | 整合性 | 抽出やグラフ書き込みが途中で失敗したら、そのクリップは「失敗」と表示し、既存のグラフは壊さない（§4 UC1 の例外フロー） |
 | 読み取り専用の質問 | 質問（UC3）はグラフを変更しない |
 | 点検可能性 | グラフの内容を Cypher として書き出せ、Relate CLI で `.rl` ファイルにして中身を確認できる |
-| 可観測性 | AI（Gemini Nano）の状態、クリップの成否、質問のために生成された Cypher を画面に表示する |
+| 可観測性 | AI（Gemini Nano）の状態、クリップの成否、質問で実行した Cypher を画面に表示する |
 | 複数ウィンドウ | どのウィンドウのサイドパネルからも、同じグラフを見て、記憶し、質問できる |
 | 動作保証のない環境 | Gemini Nano が使えない環境でも、同梱データのグラフ表示・書き出し・サンプルページのクリップは動く（質問は Nano が必要） |
 
@@ -73,7 +73,8 @@ Linka は、読んだページから概念・主張（課題・解決策など�
 | Relate Wasm | 同じ OPFS ストアを開けるのは同時に 1 か所だけ（`storage locked`）。MV3 の service worker からは dedicated worker を作れない | ADR-0145、MV3 の service worker の制約 |
 | Prompt API | Chrome 138 以降の拡張機能で利用可能。**Web Worker からは使えない。** offscreen document とサイドパネルでは使える（実記事 1 本の抽出が 2〜4 秒）。対応言語は en / ja / es / de / fr | developer.chrome.com/docs/ai/prompt-api、`spikes/offscreen-clip` |
 | Prompt API | 必要環境：空きディスク 22GB 以上、VRAM 4GB 超 または RAM 16GB 以上。審査員の環境の 2〜4 割では動かないと見込む | 同上（割合は推定） |
-| Prompt API | コンテキストは数千トークン程度（実測で確かめる）。長い記事は分割が必要 | 推定。`session.contextWindow` で実測 |
+| Prompt API | コンテキストは 9216 トークン（`contextWindow` と `inputQuota`）。英語の本文は約 4.5 文字で 1 トークン。長い記事は分割が必要 | Chrome 157（macOS）で実測（2026-11-15） |
+| Prompt API | 同じセッションに 2 回目の `prompt` を送ると、`kErrorUnknown` ですぐ失敗することがある（Cypher の作り直しで 4 回中 4 回）。`clone` したセッションへの 1 回目は通る | 同上 |
 
 ---
 
@@ -160,14 +161,11 @@ flowchart LR
 - 事前条件：グラフに 1 ページ以上ある
 - 主フロー：
   - 利用者が英語で質問を入力する（例：*Which pages propose solutions to the concerns about WebAssembly memory?*）。入力欄は複数行で、Enter は改行、⌘/Ctrl + Enter または送信ボタンで送る（日本語の変換確定の Enter では送らない）
-  - グラフの形（ラベル・関係・プロパティ）を前提として、質問から Cypher が生成される
-  - 生成された Cypher と結果の一覧（ページへのリンク付き）が表示され、結果に含まれるノードと関係がグラフ上で強調される
+  - 質問が、用意した問い合わせの種類（下の表）と、その対象（グラフにある概念の名前）に置き換えられる。どの種類と対象にするかは Gemini Nano が選び、Cypher は種類ごとに用意したものに対象を入れて作る
+  - 実行した Cypher と結果の一覧（ページへのリンク付き）が表示され、結果に含まれるノードと関係がグラフ上で強調される
   - 結果のページノードを押すと、そのページが新しいタブで開く
-- 代替フロー：
-  - 生成された Cypher が文法エラーになったら、Relate が返すエラー文を添えて作り直させる（最大 2 回）
 - 例外フロー：
-  - 生成された Cypher に書き込み（`CREATE` / `MERGE` / `INSERT` / `SET` / `DELETE` / `REMOVE` / `FOREACH` / `LOAD CSV` など）が含まれる：実行せずに拒否し、その旨を表示する
-  - 作り直しても実行できない：失敗と、グラフにある概念の名前を入れるなど言い方を変える案を表示する
+  - どの種類にも当てはまらない、または対象の概念がグラフに無い：何も実行せず、答えられる質問の種類の例と、グラフにある概念の名前を表示する
   - 結果が 0 件：「該当なし」と、実行した Cypher を表示する
   - 結果が多すぎる：先頭の一定件数（例：50 件）だけを表示する
   - Gemini Nano が使えない：入力欄の代わりに、質問には端末内 AI が必要なことを表示する。ダウンロード中なら、終われば使えることを表示する
@@ -175,6 +173,20 @@ flowchart LR
 - 事後条件：
   - グラフの内容は変わっていない
   - 表示された Cypher を CLI（UC4）で実行すると、同じ結果が得られる
+
+答えられる問い合わせの種類（Phase 1 の 10 問から。Cypher は `src/dev/questions.ts` の答えの Cypher を元にする）：
+
+| 種類 | 質問の例 |
+|---|---|
+| 概念についての課題 | What concerns are there about OPFS? |
+| 概念についての課題を解決する解決策 | Which solutions address concerns about offline support? |
+| 概念に触れるページ | Which pages mention IndexedDB? |
+| 2 つの概念を両方含むページ | Which pages mention both OPFS and Web Worker? |
+| 概念に触れるページの著者 | Who wrote the pages that mention SQLite? |
+| 関係する概念 | Which concepts are related to Web Worker? |
+| 多くのページに出てくる概念 | Which concepts are mentioned by more than three pages? |
+| 種類ごとの Claim の数 | How many claims of each type are there? |
+| あるページの課題に解決策を出しているページ | Which pages propose solutions to the concerns raised on the local-first software page? |
 
 ### UC4 調べた文脈をコーディングエージェントに渡す
 
@@ -226,7 +238,7 @@ flowchart LR
   end
   SW["service worker<br/>offscreen document を 1 つだけ作る"]
   subgraph Off["offscreen document（DB の唯一の持ち主）"]
-    AI["Prompt API (Gemini Nano)<br/>抽出・ADDRESSES 判定・Cypher 生成"]
+    AI["Prompt API (Gemini Nano)<br/>抽出・ADDRESSES 判定・質問の種類の選択"]
     subgraph Worker["Dedicated Worker"]
       DB["Relate Wasm"]
       OPFS[("OPFS<br/>opfs://linka-graph")]
@@ -244,12 +256,12 @@ flowchart LR
   Panel -->|"書き出し (.cypher)"| CLI["relate CLI → linka.rl → MCP → Claude Code / Codex"]
 ```
 
-- MV3。権限は `sidePanel`, `offscreen`, `activeTab`, `scripting`, `storage`、それにアイコンの記憶済みの印のための `tabs`（要るかは Phase 1 で確かめる。入れるとインストール時に「閲覧履歴の読み取り」の警告が出るが、受け入れる。2026-11-15 に決定）。選択範囲のクリップを入れるときは `contextMenus` を足す。CSP に `'wasm-unsafe-eval'`。`minimum_chrome_version: "138"`。ツールバーのアイコンは `action.default_popup` で吹き出しを開く
+- MV3。権限は `sidePanel`, `offscreen`, `activeTab`, `scripting`, `storage`、それにアイコンの記憶済みの印のための `tabs`（`tabs` が無いと、ほかのタブの URL が読めない。Chrome 157 で、タブの切り替え・移動のどちらでも `tab.url` が空だった。入れるとインストール時に「閲覧履歴の読み取り」の警告が出るが、受け入れる。2026-11-15 に決定）。選択範囲のクリップを入れるときは `contextMenus` を足す。CSP に `'wasm-unsafe-eval'`。`minimum_chrome_version: "138"`。ツールバーのアイコンは `action.default_popup` で吹き出しを開く
 - 使う技術は §7.1 のとおり
 - DB は offscreen document（reason は `WORKERS`）1 か所だけが持ち、その中の dedicated worker で Relate を開く。service worker は offscreen document を 1 つだけ作る役で、依頼は取り次がない。吹き出しとサイドパネルは、service worker に offscreen document を用意させてから、依頼を offscreen document に直接送る。DB の変化は offscreen document から拡張機能のすべてのページに直接知らせる。service worker は Chrome に休止させられることがあり、長い依頼の返事を service worker が持っていると、書き込みは済んだのに返事だけが失われるため。吹き出しが閉じても処理は offscreen document で続き、完了はサイドパネルに通知する（`spikes/offscreen-clip` で確認済み）
 - worker へのメッセージは 1 件ずつ処理する。panic（`isWasmTrap`）が起きたら worker を作り直す
-- Prompt API は offscreen document から呼ぶ（Worker からは使えないため）。抽出と判定には `responseConstraint`（JSON Schema）を使う。概念名に説明や推測の注記が付くことがあるので、プロンプトとスキーマで抑える
-- 抽出結果はコード側で、パラメータ付きの MERGE 文に変換して書き込む。質問（UC3）だけはモデルに Cypher を書かせる
+- Prompt API は offscreen document から呼ぶ（Worker からは使えないため）。抽出と判定には `responseConstraint` を使い、zod が作る JSON Schema をそのまま渡す（`$schema`・`minLength`・`maxLength`・`maxItems` を含めて受け付けられ、出力は zod の検査に通った）。概念名には説明の注記（例：`OPFS (Origin Private File System)`）が付くことがあるので、プロンプトで「名前だけ」と指示する（指示すると 39 個中 0 個、指示しないと 46 個中 1 個）。1 回の `prompt` ごとに、指示を入れたセッションを `clone` して使う（§4）。本文は、出力に 700 トークンを残して 2 割の余裕を引いた大きさ（約 6,700 トークン、英語で約 30,000 文字）ずつに分けて抽出する
+- 抽出結果はコード側で、パラメータ付きの MERGE 文に変換して書き込む。質問（UC3）も、モデルには種類と対象を選ばせるだけで、Cypher はコードが作る
 - 同じ `seed/demo.cypher` を、拡張機能の初回投入（`executeScript`）と、CLI での `data/linka.rl` 生成の両方に使う。Export も同じ形式で出し、CLI でもそのまま読めるようにする
 
 
@@ -347,14 +359,14 @@ Nano が使えない環境や、Nano より大きいモデルで抽出と質問�
 
 各フェーズは GitHub の milestone で管理し、最後の振り返りで PRD との食い違い・考慮漏れ・決めるべきことを確かめてから次に進む。見積もりの合計は約 40 時間で、使える時間（約 36 時間）を少し超えるが、受け入れる（2026-11-15 に決定）。
 
-W1 のスパイクで Nano の Cypher 生成の成功率が低い（10 問中 5 問未満）場合は、Nano に Cypher を書かせず、用意した問い合わせの種類と対象だけを選ばせる方式に切り替える（画面は自由文の入力欄のまま）。
+W1 のスパイクで Nano の Cypher 生成の成功率が低い（10 問中 5 問未満）場合は、Nano に Cypher を書かせず、用意した問い合わせの種類と対象だけを選ばせる方式に切り替える（画面は自由文の入力欄のまま）。→ 10 問中 2 問しか正しくなかった（実行できたのは 7 問、うち 4 問は 0 行。Chrome 157 で 2026-11-15 に計測）ので、切り替える（UC3）。
 
 ## 12. リスクと対策
 
 | リスク | 対策 |
 |---|---|
 | 審査員の環境で Gemini Nano が動かない | UC5 のデモデータ・サンプルのクリップ・書き出しは Nano 無しで動く。質問は試せないので、README と動画で Nano が動く環境での質問の流れを見せる |
-| Nano が書く Cypher が壊れる | グラフの形をプロンプトに入れる、Relate のエラー文で作り直す、書き込みを拒否する。成功率が低ければ §11 の方式に切り替える |
+| Nano が書く Cypher が壊れる | **解消（2026-11-15）。** 成功率が 10 問中 2 問だったので、Cypher はコードが作る方式に切り替えた（§11、UC3） |
 | 長い記事がコンテキストに入らない | 本文の主要部分だけを取り、分割して抽出する |
 | Relate 1.0.x の変更（11/11 公開、更新が速い） | バージョンを固定し、README に確認済みのバージョンを書く |
 | OPFS のロックで 2 つ目のウィンドウが使えない | **解消（2026-11-15）。** DB を offscreen document 1 か所に置き、サイドパネルはそこへ問い合わせる。`spikes/offscreen-clip` で、2 つのサイドパネルから同時に問い合わせられることを確認した |
@@ -363,14 +375,17 @@ W1 のスパイクで Nano の Cypher 生成の成功率が低い（10 問中 5 
 
 ## 13. 未決事項（Phase 1 で決める）
 
-- zod が作る JSON Schema（`$schema`・`enum`・`maxLength`・`maxItems` を含む）を、Prompt API の `responseConstraint` がそのまま受け付けるか。受け付けないキーワードがあれば、渡す前に取り除く
-- 分割の大きさ（`session.contextWindow` の実測値から）
+- ~~zod が作る JSON Schema を、`responseConstraint` がそのまま受け付けるか~~ → そのまま受け付ける（2026-11-15 に確認）。§7
+- ~~分割の大きさ~~ → 約 6,700 トークンずつ（2026-11-15 に決定）。§7
 - ~~質問の書き込み拒否を、キーワード検査だけにするか、`EXPLAIN` の実行計画も見るか~~ → キーワード検査だけにする（2026-11-15 に決定）。Cypher を字句に分けてから句のキーワードを探すので、文字列・コメント・プロパティ名・ラベル・マップのキーにある同じ綴りでは拒否しない。`INSERT`（Relate 1.0.1 は GQL の `INSERT` で書き込む）とスキーマ・管理の句も拒否し、手続きの呼び出しはグラフの形を読む `db.labels` などだけを通す。閉じていない文字列やコメントは拒否する。`EXPLAIN` を使わない理由は、Relate の実行計画では `CALL { … }` の副問い合わせが `CallSubquery` の 1 つにまとまり、中の書き込みが見えないため（キーワード検査より見落とす）
 - ~~Concept の別名表の持ち方~~ → コードの中の定数（`src/shared/concept-key.ts` の `CONCEPT_ALIASES`）にする（2026-11-15 に決定）。拡張機能・seed の生成・書き出しが同じ key を作る必要があり、コードに置けば 1 か所で済み、テストで表の形（左右とも正規化済み・別名の連鎖が無い・複数形は単数形に寄せる）を確かめられる。MVP には表を編集する画面が無いので、グラフや設定に持つ理由が無い。表を変えても、すでにグラフにある key は書き換わらない（新しいクリップから効く）
-- アイコンの記憶済みの印に `tabs` 権限が要るか。サイドパネルの記憶ボタンで `activeTab` が付与されるか。モデルのダウンロードの開始に利用者の操作が要るか
+- ~~アイコンの記憶済みの印に `tabs` 権限が要るか~~ → 要る（2026-11-15 に確認）。§7
+- サイドパネルの記憶ボタンで `activeTab` が付与されるか：サイドパネルから今のタブに `executeScript` できた。ボタンを押す前でもできたので、吹き出しを開いたことのないタブでも同じかを確かめる
+- モデルのダウンロードの開始に利用者の操作が要るか：確かめた環境ではモデルがすでに入っていて（`available`）、確かめられなかった。`create` は記憶ボタンを押した処理の中で呼ぶ
 - ~~Relate CLI が入り、`relate -d x.rl < seed` と `relate serve --mcp stdio` が動くか（版を記録する）~~ → 1.0.1 で動く（2026-11-15 に確認）。ストアは `relate query -d x.rl < seed/demo.cypher` で作る（`query` が要る）。`seed/demo.cypher` から、Wasm 側と同じ件数（Page 15・Concept 29・Person 9・Claim 48・`ADDRESSES` 11）の単一ファイル（約 116 KB、横に別のファイルはできない）ができる。MCP は `relate serve --database x.rl --read-only --mcp stdio` で、Claude Code と Codex から `read_cypher` で問い合わせられた。手順は §6 UC4 と §7.1
 - ~~Nano が無くても記憶できるサンプルページを、実在する記事にするか、拡張機能に同梱するページにするか~~ → 拡張機能に同梱するページにする（2026-11-15 に決定）。ネットワークや外部サイトの変更に左右されず、事前抽出データとページがずれないため。拡張機能は自身のページに `scripting.executeScript` で注入できないので、本文は読まず、タブの URL が拡張機能の `samples/` の下なら同梱の事前抽出データを使う。Page の URL は、環境ごとに変わる拡張機能の URL ではなく、リポジトリにあるそのファイルの URL にする
 
 Phase 3 で決めるもの：
 
 - UC2 で Nano に判定させる組の数の上限
+- UC3 で Nano に選ばせる対象（概念の名前）の候補の数の上限
