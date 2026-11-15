@@ -64,7 +64,7 @@ npm run build
 
 ### First run
 
-Open Chrome's side panel (the side panel button in the toolbar) and choose **Linka**. Clicking the Linka icon itself clips the current page (see [Use](#use)); its popup offers **Open side panel** after a clip. On first run the side panel shows a demo graph from technical research on local-first, offline web storage: 15 pages, 29 concepts, 9 people, 48 claims and 11 cross-page `ADDRESSES` links. The header shows the AI status: `AI ready`, `Downloading AI`, or not available with the reason.
+Open Chrome's side panel (the side panel button in the toolbar) and choose **Linka**. Clicking the Linka icon itself clips the current page (see [Use](#use)); its popup offers **Open side panel** after a clip. On first run the side panel shows a demo graph from technical research on local-first, offline web storage: 15 pages, 29 concepts, 9 people, 48 claims and 10 cross-page `ADDRESSES` links. The header shows the AI status: `AI ready`, `Downloading AI`, or not available with the reason.
 
 The next time you open it, the side panel shows your graph as you left it; the demo data is not loaded again. **… → Reset to demo data** brings the demo graph back (after a confirmation).
 
@@ -103,48 +103,70 @@ Each sample's solutions connect to concerns already in the demo graph, so the po
 
 ## Use with your coding agent
 
-The side panel's **… → Use with your agent** shows these steps with copy buttons; **… → Export** downloads the graph first. The commands below are the ones the dialog shows.
+Before you start:
 
-1. **Install the Relate CLI** (see [Relate CLI](#relate-cli)).
-2. **Export the graph.** In the side panel, choose **… → Export**. Chrome saves `linka-export.cypher` to your downloads folder (`linka-export (1).cypher` and so on if the name is taken). Export is disabled while the graph is empty.
-3. **Build the store first.** This loads the newest `linka-export*.cypher` in `~/Downloads` into `~/linka/linka.rl`. It deletes the previous `linka.rl` first, because loading into an old file would keep pages you have since removed. If your browser saves downloads elsewhere, change that path.
+- **Install the Relate CLI** (see [Relate CLI](#relate-cli)).
+- **Export the graph.** In the side panel, choose **… → Export**. Chrome saves `linka-export.cypher` to your downloads folder (`linka-export (1).cypher` and so on if the name is taken). Export is disabled while the graph is empty. **… → Use with your agent** shows the same steps as below, with copy buttons.
+
+Then, in a terminal:
+
+1. **Make a Relate file.** This loads the newest `linka-export*.cypher` in `~/Downloads`, so a re-export saved as `linka-export (1).cypher` is used too. If your browser saves downloads elsewhere, change the path on the first line.
 
    ```sh
-   export_file=$(ls -t "$HOME"/Downloads/linka-export*.cypher | head -n 1) &&
-     [ -n "$export_file" ] && echo "Loading $export_file" &&
+   downloads="$HOME/Downloads" &&
+     export_name=$(command ls -t "$downloads" | awk '/^linka-export.*\.cypher$/ && !found { print; found = 1 }') &&
+     export_file="$downloads/$export_name" &&
+     [ -f "$export_file" ] && [ -r "$export_file" ] ||
+     { echo "linka: no readable linka-export*.cypher in $downloads" >&2; false; } &&
+     echo "Loading $export_file" &&
      mkdir -p "$HOME/linka" &&
      rm -f "$HOME/linka/linka.rl" &&
      DO_NOT_TRACK=1 relate query -d "$HOME/linka/linka.rl" < "$export_file" > /dev/null
    ```
 
-   On macOS, if this fails with `Operation not permitted`, your terminal app is not allowed to read `~/Downloads`. Either allow it in System Settings → Privacy & Security → Files and Folders (Downloads Folder) or Full Disk Access, or move `linka-export.cypher` from Downloads into a `linka` folder in your home folder **in Finder** (moving it from the terminal fails for the same reason) and load it from there:
+   If it says `Operation not permitted`, your terminal can't read `~/Downloads`. Either allow it in System Settings → Privacy & Security → Files and Folders → your terminal app → Downloads Folder (or Full Disk Access) and restart the terminal, or in Finder move the file to `~/linka` (create the folder if needed), rename it to `linka-export.cypher` if it is, say, `linka-export (1).cypher`, and run:
 
    ```sh
-   rm -f "$HOME/linka/linka.rl" &&
-     DO_NOT_TRACK=1 relate query -d "$HOME/linka/linka.rl" < "$HOME/linka/linka-export.cypher" > /dev/null
+   export_file="$HOME/linka/linka-export.cypher" &&
+     [ -f "$export_file" ] && [ -r "$export_file" ] ||
+     { echo "linka: no readable linka-export.cypher in ~/linka" >&2; false; } &&
+     echo "Loading $export_file" &&
+     mkdir -p "$HOME/linka" &&
+     rm -f "$HOME/linka/linka.rl" &&
+     DO_NOT_TRACK=1 relate query -d "$HOME/linka/linka.rl" < "$export_file" > /dev/null
    ```
 
-   If loading fails, the CLI exits with a non-zero status (6 for syntax and type errors) and reports which statement failed. Statements before it stay in the file, so delete `linka.rl` before you try again.
-4. **Then register it** as a read-only MCP server. `$HOME` is expanded by your shell, so the agent's configuration gets an absolute path.
+   Both commands delete the previous `linka.rl` only after they find a readable export, because loading into an old file would keep pages you have since removed. If loading fails, the CLI exits with a non-zero status (6 for syntax and type errors) and reports which statement failed. Statements before it stay in the file, so run the command again after fixing the cause; it starts from an empty file.
 
-   Claude Code (run it in your project directory; add `--scope user` to use it in every project; check with `claude mcp list`):
+2. **Register it as a read-only MCP server.** Do this after step 1 succeeds; otherwise the server fails to start. `$HOME` is expanded by your shell, so the agent's configuration gets an absolute path.
+
+   Claude Code:
 
    ```sh
    claude mcp add linka -e DO_NOT_TRACK=1 -- relate serve --database "$HOME/linka/linka.rl" --read-only --mcp stdio
    ```
 
-   Codex (writes `[mcp_servers.linka]` to `~/.codex/config.toml`; running it again replaces it; restart Codex and run `/mcp` to see linka):
+   Run it in your project directory (add `--scope user` to use it in every project). Check it with `claude mcp list`.
+
+   Codex:
 
    ```sh
    codex mcp add linka --env DO_NOT_TRACK=1 -- relate serve --database "$HOME/linka/linka.rl" --read-only --mcp stdio
    ```
 
+   Writes `[mcp_servers.linka]` to `~/.codex/config.toml`; running it again replaces it. Restart Codex and run `/mcp` to see linka.
+
+   If `/mcp` shows linka as failed, check that `ls ~/linka/linka.rl` lists the file. If not, run step 1.
+
    With `--read-only`, the agent sees only `read_cypher` and `get_schema`, and the file is not modified. Without it, the agent also gets `write_cypher` and can change the graph.
-5. **Ask your agent**, for example:
 
-   > Use the linka graph to suggest an implementation plan based on the concerns and solutions I researched.
+3. **Ask your agent.**
 
-To check the file without an agent:
+   ```text
+   Use the linka graph to suggest an implementation plan based on the concerns and solutions I researched.
+   ```
+
+To check the file without an agent, run:
 
 ```sh
 DO_NOT_TRACK=1 relate query --read-only -d "$HOME/linka/linka.rl" "MATCH (p:Page) RETURN p.title AS title"
@@ -163,7 +185,7 @@ DO_NOT_TRACK=1 relate query --read-only -d "$HOME/linka/linka.rl" "MATCH (p:Page
 
 ## The bundled store: `data/linka.rl`
 
-`data/linka.rl` holds the same graph the extension shows on first run (verified with Relate CLI 1.0.1: 15 `Page`, 29 `Concept`, 9 `Person`, 48 `Claim`; 90 `ABOUT`, 11 `ADDRESSES`, 48 `ASSERTS`, 9 `AUTHORED_BY`, 64 `MENTIONS`, 25 `RELATED_TO`). Always open it with `--read-only`: without it, even a read rewrites the file.
+`data/linka.rl` (a single file of about 116 KB) holds the same graph the extension shows on first run (verified with Relate CLI 1.0.1: 15 `Page`, 29 `Concept`, 9 `Person`, 48 `Claim`; 90 `ABOUT`, 10 `ADDRESSES`, 48 `ASSERTS`, 9 `AUTHORED_BY`, 64 `MENTIONS`, 25 `RELATED_TO`). Always open it with `--read-only`: without it, even a read rewrites the file.
 
 ```sh
 export DO_NOT_TRACK=1
