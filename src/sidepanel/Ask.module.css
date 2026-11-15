@@ -1,0 +1,151 @@
+/* 質問の入力欄と答え（mock/styles.css の .ask・.cypher・.results を写したもの） */
+.ask {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  border-top: 1px solid var(--rule);
+  padding: 10px 14px 12px;
+  background: var(--panel);
+}
+.form {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.input {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  padding: 7px 10px;
+  background: #fff;
+  font: inherit;
+  line-height: 1.5;
+  max-height: 132px;
+}
+.hint {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+.unavailable {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.send {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--act);
+  color: #fff;
+  display: grid;
+  place-items: center;
+}
+.send:hover {
+  background: #2633a8;
+}
+.send:disabled {
+  background: #c9cee0;
+  color: #f4f5fa;
+  cursor: not-allowed;
+}
+
+.answer {
+  margin: 0 0 14px;
+}
+.answer h3 {
+  font-size: 15px;
+  margin: 0 0 2px;
+  overflow-wrap: anywhere;
+}
+.question {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+.cypherHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.cypher {
+  font-family: var(--code);
+  font-variant-ligatures: none;
+  font-size: 11.5px;
+  line-height: 1.5;
+  background: #1e2533;
+  color: #dfe4ef;
+  border-radius: 8px;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 6px 0 10px;
+}
+.results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.results li {
+  font-size: 13px;
+  border-left: 3px solid var(--act-tint);
+  padding-left: 10px;
+  overflow-wrap: anywhere;
+}
+.results a {
+  color: var(--act);
+}
+.label {
+  color: var(--ink-soft);
+  font-size: 11.5px;
+  margin-right: 6px;
+}
+.muted {
+  color: var(--ink-soft);
+  font-size: 13px;
+  margin: 0 0 6px;
+}
+.examples {
+  margin: 4px 0 10px;
+  padding-left: 18px;
+  font-size: 13px;
+}
+.concepts {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+}
+.notice {
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  margin: 0 0 10px;
+  overflow-wrap: anywhere;
+}
+.bad {
+  background: var(--concern-tint);
+  color: #6d1a3e;
+}
+.warn {
+  background: var(--warn-tint);
+  color: #5c3c00;
+}
+.linkish {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--act);
+  font-size: 12.5px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
