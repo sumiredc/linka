@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EXPORT_FILE_NAME, EXPORT_READ_SCRIPT } from "../shared/graph-export";
 import { failure, type RelateResult } from "../shared/messages";
-import { exportGraph } from "./export-graph";
+import { canExport, exportGraph } from "./export-graph";
 
 const result = (rows: Record<string, unknown>[] = []): RelateResult => ({
   columns: [],
@@ -60,5 +60,13 @@ describe("exportGraph", () => {
     const outcome = await exportGraph(deps);
     expect(outcome.ok).toBe(false);
     expect(saved).toEqual([]);
+  });
+});
+
+describe("canExport", () => {
+  it("is false while the graph is loading or has no pages, and true with one page", () => {
+    expect(canExport(null)).toBe(false);
+    expect(canExport({ totalPages: 0 })).toBe(false);
+    expect(canExport({ totalPages: 1 })).toBe(true);
   });
 });

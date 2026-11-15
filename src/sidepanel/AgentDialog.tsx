@@ -83,15 +83,34 @@ function Intro({ exported }: { exported: ExportState }) {
   );
 }
 
-function Command({ text, label }: { text: string; label: string }) {
-  const [copied, setCopied] = useState(false);
+type CopyState = "idle" | "copied" | "failed";
+
+const COPY_TEXT: Record<CopyState, string> = {
+  idle: "Copy",
+  copied: "Copied",
+  failed: "Copy failed",
+};
+
+// 読み上げは live region に任せ、ボタンには見えている文字をそのまま名前にする
+const COPY_ANNOUNCEMENT: Record<CopyState, string> = {
+  idle: "",
+  copied: "Copied to the clipboard.",
+  failed: "Could not copy. Select the text and copy it yourself.",
+};
+
+function Command({ text }: { text: string }) {
+  const [state, setState] = useState<CopyState>("idle");
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
   const copy = () => {
+    const show = (next: CopyState) => {
+      setState(next);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => setState("idle"), 2500);
+    };
     navigator.clipboard.writeText(text).then(
-      () => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      },
-      () => setCopied(false),
+      () => show("copied"),
+      () => show("failed"),
     );
   };
   return (
@@ -99,9 +118,12 @@ function Command({ text, label }: { text: string; label: string }) {
       <pre>
         <code>{text}</code>
       </pre>
-      <button type="button" className={styles.copy} onClick={copy} aria-label={`Copy ${label}`}>
-        {copied ? "Copied" : "Copy"}
+      <button type="button" className={styles.copy} data-state={state} onClick={copy}>
+        {COPY_TEXT[state]}
       </button>
+      <span role="status" className={styles.visuallyHidden}>
+        {COPY_ANNOUNCEMENT[state]}
+      </span>
     </div>
   );
 }
@@ -155,7 +177,7 @@ function AgentTabs() {
         aria-labelledby="agent-tab-claude"
         hidden={agent !== "claude"}
       >
-        <Command text={CLAUDE_CODE_COMMAND} label="the Claude Code command" />
+        <Command text={CLAUDE_CODE_COMMAND} />
         <p className={styles.note}>
           Run it in your project directory (add <code>--scope user</code> to use it in every
           project). Check it with <code>claude mcp list</code>.
@@ -167,10 +189,10 @@ function AgentTabs() {
         aria-labelledby="agent-tab-codex"
         hidden={agent !== "codex"}
       >
-        <Command text={CODEX_COMMAND} label="the Codex command" />
+        <Command text={CODEX_COMMAND} />
         <p className={styles.note}>
-          Adds <code>[mcp_servers.linka]</code> to <code>~/.codex/config.toml</code> once. Restart
-          Codex and run <code>/mcp</code> to see linka.
+          Writes <code>[mcp_servers.linka]</code> to <code>~/.codex/config.toml</code>; running it
+          again replaces it. Restart Codex and run <code>/mcp</code> to see linka.
         </p>
       </div>
     </>
@@ -208,10 +230,11 @@ export function AgentDialog({
       <ol className={styles.steps}>
         <li>
           <span>
-            Make a Relate file. Your browser may save it as <code>linka-export (1).cypher</code> if
-            one already exists; use that name.
+            Make a Relate file. This loads the newest <code>linka-export*.cypher</code> in{" "}
+            <code>~/Downloads</code>, so a re-export saved as <code>linka-export (1).cypher</code>{" "}
+            is used too. If your browser saves downloads elsewhere, change that path.
           </span>
-          <Command text={BUILD_STORE_COMMAND} label="the commands that make the Relate file" />
+          <Command text={BUILD_STORE_COMMAND} />
         </li>
         <li>
           <span>Register it as a read-only MCP server.</span>
@@ -219,7 +242,7 @@ export function AgentDialog({
         </li>
         <li>
           <span>Ask your agent.</span>
-          <Command text={AGENT_PROMPT} label="the prompt" />
+          <Command text={AGENT_PROMPT} />
         </li>
       </ol>
       <p className={styles.note}>

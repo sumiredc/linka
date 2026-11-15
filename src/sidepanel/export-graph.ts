@@ -42,3 +42,8 @@ export function downloadText(fileName: string, text: string): void {
   // クリックの直後に解放すると、ダウンロードが始まる前に URL が消えることがある
   setTimeout(() => URL.revokeObjectURL(url), REVOKE_AFTER_MS);
 }
+
+/** グラフにページが無い（読み込み中も含む）なら書き出せない（PRD UC4 の例外フロー） */
+export function canExport(view: { totalPages: number } | null): boolean {
+  return (view?.totalPages ?? 0) > 0;
+}
