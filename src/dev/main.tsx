@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { DbConsole } from "./DbConsole";
 import { ExtractionCheck } from "./ExtractionCheck";
+import { JudgeAccuracyCheck } from "./JudgeAccuracyCheck";
 import { NanoChecks } from "./NanoChecks";
 
 // 本番の UI からはリンクしない。chrome-extension://<id>/dev.html を直接開いて、Nano と Relate を手で確かめる
@@ -13,6 +14,7 @@ createRoot(root).render(
       <h1>Linka dev</h1>
       <DbConsole />
       <ExtractionCheck />
+      <JudgeAccuracyCheck />
       <NanoChecks />
     </main>
   </StrictMode>,
