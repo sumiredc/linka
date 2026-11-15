@@ -22,6 +22,11 @@
         starts the worker; when that tab closes, the lock is released and the next tab in the queue
         takes over.
       </p>
+      <h2>A file, not a memory image</h2>
+      <p>
+        Because the database lives in a file on OPFS, SQLite reads only the pages a query needs. The
+        dataset does not have to fit into WebAssembly memory, which tops out at 4GB.
+      </p>
       <h2>What it costs</h2>
       <p>
         Every query now crosses a message boundary, so results are copied with the structured clone

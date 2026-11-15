@@ -31,6 +31,7 @@
     ],
     "relatedConcepts": [
       { "from": "Last-write-wins", "to": "CRDT" },
+      { "from": "Yjs", "to": "CRDT" },
       { "from": "Yjs", "to": "WebSocket" }
     ]
   },
@@ -38,17 +39,7 @@
     {
       "solution": {
         "page": "https://crdt.tech/",
-        "statement": "CRDTs merge concurrent updates automatically, so every replica converges to the same state without a central server deciding the order."
-      },
-      "concern": {
-        "page": "samples/crdt-notes-sync.html",
-        "statement": "Syncing whole documents with last-write-wins silently drops one device's changes when two devices edit the same note offline."
-      }
-    },
-    {
-      "solution": {
-        "page": "https://docs.yjs.dev/",
-        "statement": "Yjs shared types let several users edit the same document concurrently and merge their changes automatically."
+        "statement": "With a CRDT, users can modify the data on any replica independently, and the CRDT merges the changes automatically into a consistent state."
       },
       "concern": {
         "page": "samples/crdt-notes-sync.html",
@@ -61,8 +52,8 @@
         "statement": "Persist each Yjs document to IndexedDB on every change and sync updates over WebSocket when online, so the app keeps working while the server is unreachable."
       },
       "concern": {
-        "page": "https://www.inkandswitch.com/local-first/",
-        "statement": "Cloud apps stop working when the server is unreachable or the vendor shuts the service down."
+        "page": "https://www.inkandswitch.com/essay/local-first/",
+        "statement": "A cloud app cannot be used at all while its service is unavailable, for example when the device is offline."
       }
     }
   ]
