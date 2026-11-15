@@ -7,6 +7,8 @@ export type CypherParams = Record<string, unknown>;
 export type DbRequest =
   | { kind: "execute"; query: string; params?: CypherParams }
   | { kind: "executeScript"; script: string; params?: CypherParams }
+  /** Reset to demo data。グラフをすべて消してから、同梱のデモデータを入れ直す */
+  | { kind: "resetToDemo" }
   | { kind: "status" };
 
 /** Relate の結果（wire envelope）のうち、画面が使う部分 */
@@ -43,7 +45,7 @@ export type DbResponse<T = unknown> = { ok: true; value: T } | DbFailure;
 
 export type DbResultOf<R extends DbRequest> = R extends { kind: "execute" }
   ? RelateResult
-  : R extends { kind: "executeScript" }
+  : R extends { kind: "executeScript" } | { kind: "resetToDemo" }
     ? RelateResult[]
     : StorageState;
 

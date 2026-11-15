@@ -6,7 +6,7 @@ import { openMemoryDb } from "../shared/test/relate-node";
 import { DbClient, type WorkerHandlers } from "./db-client";
 import type { WorkerRequest, WorkerResponse } from "./worker-protocol";
 
-// DbClient を本物の Relate（Node 上のメモリ DB）につないで、初回の投入を確かめる
+// DbClient を本物の Relate（Node 上のメモリ DB）につないで、初回の投入と Reset を確かめる
 
 // PRD §13。CLI で seed/demo.cypher から作った data/linka.rl と同じ件数
 const DEMO_COUNTS = { Page: 15, Concept: 29, Person: 9, Claim: 48, ADDRESSES: 11 };
@@ -126,5 +126,29 @@ describe("seeding on open", () => {
     await run(client, "CREATE (:Page {url: 'https://example.com/lost'})");
     crash();
     expect(await counts(client)).toEqual(DEMO_COUNTS);
+  });
+});
+
+describe("resetToDemo", () => {
+  it("replaces whatever is in the graph with the demo data", async () => {
+    const { client, notifications } = connect(freshStore());
+    await run(client, "MATCH (c:Claim) WITH c LIMIT 5 DETACH DELETE c");
+    await run(client, "CREATE (:Page {url: 'https://example.com/mine'})-[:MENTIONS]->(:Concept)");
+    notifications.length = 0;
+
+    const reset = await client.request({ kind: "resetToDemo" });
+    expect(reset.ok).toBe(true);
+    expect(await counts(client)).toEqual(DEMO_COUNTS);
+    const mine = await run(client, "MATCH (p:Page {url: 'https://example.com/mine'}) RETURN p");
+    expect(mine.rows).toEqual([]);
+    expect(notifications).toContainEqual({ type: "graphChanged" });
+  });
+
+  it("fails without touching the graph when no demo data is bundled", async () => {
+    const { client } = connect(freshStore(), {});
+    await run(client, "CREATE (:Page {url: 'https://example.com/mine'})");
+    const reset = await client.request({ kind: "resetToDemo" });
+    expect(reset).toMatchObject({ ok: false, error: { kind: "exception" } });
+    expect((await counts(client)).Page).toBe(1);
   });
 });
