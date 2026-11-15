@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { extractPage } from "../offscreen/extract";
+import { chunkText } from "../shared/chunk-text";
 import type { DbResponse } from "../shared/messages";
 import { askModel, onModelStatus } from "../shared/model";
 import type { ModelStatus } from "../shared/model-status";
@@ -7,22 +8,6 @@ import { languageModel } from "../shared/prompt-api";
 import { annotatedNames } from "./extraction-checks";
 
 // 開発用。本番の抽出（extractPage）を実際の記事の本文で試す。モデルの状態とダウンロードは offscreen document に尋ねる
-
-const CHUNK_CHARS = 30_000;
-
-// 本番の分割は #12 で作る。ここでは空白の位置で大まかに切るだけ
-function roughChunks(text: string): string[] {
-  const chunks: string[] = [];
-  let rest = text.trim();
-  while (rest.length > CHUNK_CHARS) {
-    const cut = rest.lastIndexOf(" ", CHUNK_CHARS);
-    const at = cut > 0 ? cut : CHUNK_CHARS;
-    chunks.push(rest.slice(0, at));
-    rest = rest.slice(at).trim();
-  }
-  if (rest !== "") chunks.push(rest);
-  return chunks;
-}
 
 export function ExtractionCheck() {
   const [model, setModel] = useState<DbResponse<ModelStatus> | null>(null);
@@ -33,7 +18,7 @@ export function ExtractionCheck() {
   useEffect(() => onModelStatus((status) => setModel({ ok: true, value: status })), []);
 
   const run = async () => {
-    const chunks = roughChunks(text);
+    const chunks = chunkText(text);
     setOutput(`${chunks.length} 個に分けて抽出しています`);
     const started = performance.now();
     const result = await extractPage(languageModel(), { title, chunks });

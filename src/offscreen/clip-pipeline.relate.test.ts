@@ -2,6 +2,7 @@ import type { RelateDb } from "@relate/relate-wasm";
 import { describe, expect, it, vi } from "vitest";
 import sampleJson from "../../public/samples/keep-offline-data.json?raw";
 import seed from "../../seed/demo.cypher?raw";
+import { CHUNK_MAX_CHARS } from "../shared/chunk-text";
 import { claimId } from "../shared/claim-id";
 import type { ClipBody, ClipEvent, ClipResult } from "../shared/clip-status";
 import type { CypherStatement } from "../shared/cypher";
@@ -362,7 +363,11 @@ describe("clipping a page", () => {
 
   it("tells the UI how the clip progresses and how it ended", async () => {
     const t = setup({ model: new FakeModel([answer(FIRST), answer(FIRST)]) });
-    await t.pipeline.clip(PAGE, "Graph", text(`${"a".repeat(29_000)}\n\n${"b".repeat(29_000)}`));
+    await t.pipeline.clip(
+      PAGE,
+      "Graph",
+      text(`${"a".repeat(CHUNK_MAX_CHARS - 1_000)}\n\n${"b".repeat(CHUNK_MAX_CHARS - 1_000)}`),
+    );
     expect(
       t.events.map((event) => (event.kind === "progress" ? event.progress.stage : event.kind)),
     ).toEqual([
