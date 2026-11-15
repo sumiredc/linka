@@ -354,6 +354,20 @@ describe("DbClient", () => {
       return ctx;
     }
 
+    it("opens once for requests that arrive together", async () => {
+      const { client, workers, current } = await unavailable();
+      client.request({ kind: "execute", query: "RETURN 1" });
+      const second = client.request({ kind: "execute", query: "RETURN 2" });
+      await flush();
+      current().reply({ ok: true, value: null });
+      await flush();
+      current().reply({ ok: true, value: ok() });
+      await flush();
+      current().reply({ ok: true, value: ok() });
+      expect(await second).toMatchObject({ ok: true });
+      expect(openedModes(workers)).toEqual(["opfs", "opfs"]);
+    });
+
     it("fails a request as unavailable when OPFS still cannot be opened", async () => {
       const { client, current } = await unavailable();
       const response = client.request({ kind: "execute", query: "RETURN 1" });
