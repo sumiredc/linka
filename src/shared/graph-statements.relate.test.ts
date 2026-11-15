@@ -4,9 +4,14 @@ import { claimId } from "./claim-id";
 import { toCypherScript } from "./cypher";
 import type { Clip, Extraction } from "./extraction";
 import {
+  buildAddressesCandidatesStatement,
   buildAddressesStatement,
   buildClipStatements,
+  buildConnectionsStatement,
   buildReclipStatements,
+  buildRemoveAddressesStatement,
+  CANDIDATE_LIMITS,
+  toAddressesCandidates,
 } from "./graph-statements";
 import { openMemoryDb, run, runScript, runStatements, scalar } from "./test/relate-node";
 
@@ -418,5 +423,227 @@ describe("buildAddressesStatement on Relate", () => {
     const d = db();
     runStatements(d, [buildAddressesStatement([{ solution: concern, concern: solution }])]);
     expect(scalar(d, "MATCH ()-[r:ADDRESSES]->() RETURN count(r)")).toBe(0);
+  });
+});
+
+describe("buildAddressesCandidatesStatement on Relate", () => {
+  const NEW = "https://new.example/article";
+  const OLD = "https://old.example/post";
+  const ANOTHER = "https://another.example/doc";
+  type ClaimInput = Extraction["claims"][number];
+
+  function pageClip(url: string, claims: ClaimInput[]): Clip {
+    return clip(url, "page", { claims });
+  }
+
+  function graph(...clips: Clip[]): RelateDb {
+    const d = openMemoryDb();
+    for (const item of clips) runStatements(d, buildClipStatements(item));
+    return d;
+  }
+
+  function pairsOf(d: RelateDb, url = NEW, limits?: { perClaim: number; total: number }) {
+    const statement = buildAddressesCandidatesStatement(url, limits);
+    return toAddressesCandidates(run(d, statement.query, statement.params).rows);
+  }
+
+  function candidates(d: RelateDb, url = NEW, limits?: { perClaim: number; total: number }) {
+    return pairsOf(d, url, limits).map((pair) => ({
+      solution: pair.solution.statement,
+      concern: pair.concern.statement,
+      concepts: [...pair.concepts].sort(),
+    }));
+  }
+
+  const solution = (statement: string, concepts: string[]): ClaimInput => ({
+    statement,
+    type: "solution",
+    concepts,
+  });
+  const concern = (statement: string, concepts: string[]): ClaimInput => ({
+    statement,
+    type: "concern",
+    concepts,
+  });
+
+  it("pairs a solution of the new page with a concern of another page about the same concept", () => {
+    const d = graph(
+      pageClip(OLD, [concern("Workers cannot touch the DOM.", ["Web Worker"])]),
+      pageClip(NEW, [solution("Post messages back to the main thread.", ["Web Worker"])]),
+    );
+    expect(candidates(d)).toEqual([
+      {
+        solution: "Post messages back to the main thread.",
+        concern: "Workers cannot touch the DOM.",
+        concepts: ["Web Worker"],
+      },
+    ]);
+  });
+
+  it("also pairs a concern of the new page with a solution of another page, still solution to concern", () => {
+    const d = graph(
+      pageClip(OLD, [solution("Post messages back to the main thread.", ["Web Worker"])]),
+      pageClip(NEW, [concern("Workers cannot touch the DOM.", ["Web Worker"])]),
+    );
+    expect(pairsOf(d)).toEqual([
+      {
+        solution: {
+          id: claimId(OLD, "Post messages back to the main thread."),
+          statement: "Post messages back to the main thread.",
+          pageUrl: OLD,
+          pageTitle: `Title of ${OLD}`,
+        },
+        concern: {
+          id: claimId(NEW, "Workers cannot touch the DOM."),
+          statement: "Workers cannot touch the DOM.",
+          pageUrl: NEW,
+          pageTitle: `Title of ${NEW}`,
+        },
+        concepts: ["Web Worker"],
+      },
+    ]);
+  });
+
+  it("does not pair claims of the same page", () => {
+    const d = graph(
+      pageClip(NEW, [
+        solution("Post messages back to the main thread.", ["Web Worker"]),
+        concern("Workers cannot touch the DOM.", ["Web Worker"]),
+      ]),
+    );
+    expect(candidates(d)).toEqual([]);
+  });
+
+  it("does not pair claims that share no concept", () => {
+    const d = graph(
+      pageClip(OLD, [concern("Workers cannot touch the DOM.", ["Web Worker"])]),
+      pageClip(NEW, [solution("Use OPFS for files.", ["OPFS"])]),
+    );
+    expect(candidates(d)).toEqual([]);
+  });
+
+  it("pairs only a solution with a concern", () => {
+    const d = graph(
+      pageClip(OLD, [
+        concern("Workers cannot touch the DOM.", ["Web Worker"]),
+        { statement: "Workers run in parallel.", type: "benefit", concepts: ["Web Worker"] },
+        { statement: "Workers exist since 2009.", type: "fact", concepts: ["Web Worker"] },
+        solution("Use a SharedWorker.", ["Web Worker"]),
+      ]),
+      pageClip(NEW, [
+        concern("Workers are slow to start.", ["Web Worker"]),
+        { statement: "Workers are cheap.", type: "benefit", concepts: ["Web Worker"] },
+      ]),
+    );
+    expect(candidates(d)).toEqual([
+      {
+        solution: "Use a SharedWorker.",
+        concern: "Workers are slow to start.",
+        concepts: ["Web Worker"],
+      },
+    ]);
+  });
+
+  it("leaves out a pair that already has ADDRESSES", () => {
+    const d = graph(
+      pageClip(OLD, [
+        concern("Workers cannot touch the DOM.", ["Web Worker"]),
+        concern("Workers are slow to start.", ["Web Worker"]),
+      ]),
+      pageClip(NEW, [solution("Post messages back to the main thread.", ["Web Worker"])]),
+    );
+    runStatements(d, [
+      buildAddressesStatement([
+        {
+          solution: claimId(NEW, "Post messages back to the main thread."),
+          concern: claimId(OLD, "Workers cannot touch the DOM."),
+        },
+      ]),
+    ]);
+    expect(candidates(d).map((pair) => pair.concern)).toEqual(["Workers are slow to start."]);
+  });
+
+  it("keeps up to perClaim pairs for each new claim, those sharing the most concepts first", () => {
+    const d = graph(
+      pageClip(OLD, [
+        concern("One shared.", ["Web Worker"]),
+        concern("Two shared.", ["Web Worker", "OPFS"]),
+        concern("Also one shared.", ["OPFS"]),
+      ]),
+      pageClip(NEW, [
+        solution("First solution.", ["Web Worker", "OPFS"]),
+        solution("Second solution.", ["Web Worker", "OPFS"]),
+      ]),
+    );
+    const pairs = candidates(d, NEW, { perClaim: 2, total: 100 });
+    for (const name of ["First solution.", "Second solution."]) {
+      const mine = pairs.filter((pair) => pair.solution === name);
+      expect(mine).toHaveLength(2);
+      expect(mine[0]?.concern).toBe("Two shared.");
+    }
+    expect(candidates(d, NEW, { perClaim: 100, total: 100 })).toHaveLength(6);
+  });
+
+  it("keeps at most total pairs across the new claims", () => {
+    const d = graph(
+      pageClip(OLD, [concern("A.", ["Web Worker"]), concern("B.", ["Web Worker"])]),
+      pageClip(ANOTHER, [concern("C.", ["Web Worker"])]),
+      pageClip(NEW, [solution("X.", ["Web Worker"]), solution("Y.", ["Web Worker"])]),
+    );
+    expect(candidates(d, NEW, { perClaim: 100, total: 4 })).toHaveLength(4);
+    expect(candidates(d, NEW, { perClaim: 100, total: 100 })).toHaveLength(6);
+  });
+
+  it("uses the limits written in PRD UC2 by default", () => {
+    expect(buildAddressesCandidatesStatement(NEW).params).toMatchObject(CANDIDATE_LIMITS);
+  });
+});
+
+describe("buildConnectionsStatement and buildRemoveAddressesStatement on Relate", () => {
+  const concern = claimId(WASM_URL, "32-bit Wasm linear memory is capped at 4GB per instance.");
+  const solution = claimId(OPFS_URL, "Memory64 lifts the 4GB cap.");
+  const other = claimId(WASM_URL, "An in-memory graph must fit its indexes in that budget.");
+
+  function db(): RelateDb {
+    const d = openMemoryDb();
+    runStatements(d, buildClipStatements(wasmClip));
+    runStatements(d, buildClipStatements(opfsClip));
+    runStatements(d, [buildAddressesStatement([{ solution, concern }])]);
+    return d;
+  }
+
+  it("reads only the given pairs that have ADDRESSES, with their statements and pages", () => {
+    const d = db();
+    const statement = buildConnectionsStatement([
+      { solution, concern },
+      { solution, concern: other },
+    ]);
+    expect(toAddressesCandidates(run(d, statement.query, statement.params).rows)).toEqual([
+      {
+        solution: {
+          id: solution,
+          statement: "Memory64 lifts the 4GB cap.",
+          pageUrl: OPFS_URL,
+          pageTitle: `Title of ${OPFS_URL}`,
+        },
+        concern: {
+          id: concern,
+          statement: "32-bit Wasm linear memory is capped at 4GB per instance.",
+          pageUrl: WASM_URL,
+          pageTitle: `Title of ${WASM_URL}?utm_source=feed#top`,
+        },
+        concepts: [],
+      },
+    ]);
+  });
+
+  it("removes only the given ADDRESSES", () => {
+    const d = db();
+    runStatements(d, [
+      buildAddressesStatement([{ solution, concern: other }]),
+      buildRemoveAddressesStatement([{ solution, concern }]),
+    ]);
+    const { rows } = run(d, "MATCH (s:Claim)-[:ADDRESSES]->(c:Claim) RETURN c.id AS c");
+    expect(rows).toEqual([{ c: other }]);
   });
 });
