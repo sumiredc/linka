@@ -34,7 +34,7 @@ it("leaves the side panel graph unchanged and saves a script that rebuilds the s
   });
   expect(outcome.ok).toBe(true);
   expect(panelCounts(db)).toEqual(before);
-  expect(before).toEqual({ pages: 15, concepts: 29, claims: 48, links: 238 });
+  expect(before).toEqual({ pages: 15, concepts: 29, claims: 48, links: 237 });
 
   const copy = openMemoryDb();
   runScript(copy, saved[0] ?? "");

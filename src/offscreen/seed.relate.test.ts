@@ -10,7 +10,7 @@ import type { WorkerRequest, WorkerResponse } from "./worker-protocol";
 // DbClient を本物の Relate（Node 上のメモリ DB）につないで、初回の投入と Reset を確かめる
 
 // PRD §13。CLI で seed/demo.cypher から作った data/linka.rl と同じ件数
-const DEMO_COUNTS = { Page: 15, Concept: 29, Person: 9, Claim: 48, ADDRESSES: 11 };
+const DEMO_COUNTS = { Page: 15, Concept: 29, Person: 9, Claim: 48, ADDRESSES: 10 };
 
 /**
  * OPFS と localStorage の代わり。同じ store を開くと前回の中身が残っている。

@@ -387,7 +387,7 @@ W1 のスパイクで Nano の Cypher 生成の成功率が低い（10 問中 5 
 - ~~アイコンの記憶済みの印に `tabs` 権限が要るか~~ → 要る（2026-11-15 に確認）。§7
 - ~~サイドパネルの記憶ボタンで `activeTab` が付与されるか~~ → 付与されない（2026-11-15 に確認）。アイコンを押したことのないタブでは、サイドパネルを開いた直後もボタンを押した後も `executeScript` が「Cannot access contents of the page」で失敗した。アイコンを押したことのあるタブでは成功したので、許可はアイコンを押したときに付く。記憶はアイコンの吹き出しからだけ始める（UC1）
 - モデルのダウンロードの開始に利用者の操作が要るか：確かめた環境ではモデルがすでに入っていて（`available`）、確かめられなかった。`create` は吹き出しを開いた処理の中で呼ぶ
-- ~~Relate CLI が入り、`relate -d x.rl < seed` と `relate serve --mcp stdio` が動くか（版を記録する）~~ → 1.0.1 で動く（2026-11-15 に確認）。ストアは `relate query -d x.rl < seed/demo.cypher` で作る（`query` が要る）。`seed/demo.cypher` から、Wasm 側と同じ件数（Page 15・Concept 29・Person 9・Claim 48・`ADDRESSES` 11）の単一ファイル（約 116 KB、横に別のファイルはできない）ができる。MCP は `relate serve --database x.rl --read-only --mcp stdio` で、Claude Code と Codex から `read_cypher` で問い合わせられた。手順は §6 UC4 と §7.1
+- ~~Relate CLI が入り、`relate -d x.rl < seed` と `relate serve --mcp stdio` が動くか（版を記録する）~~ → 1.0.1 で動く（2026-11-15 に確認）。ストアは `relate query -d x.rl < seed/demo.cypher` で作る（`query` が要る）。`seed/demo.cypher` から、Wasm 側と同じ件数（Page 15・Concept 29・Person 9・Claim 48・`ADDRESSES` 10）の単一ファイル（約 116 KB、横に別のファイルはできない）ができる。MCP は `relate serve --database x.rl --read-only --mcp stdio` で、Claude Code と Codex から `read_cypher` で問い合わせられた。手順は §6 UC4 と §7.1
 - ~~Nano が無くても記憶できるサンプルページを、実在する記事にするか、拡張機能に同梱するページにするか~~ → 拡張機能に同梱するページにする（2026-11-15 に決定）。ネットワークや外部サイトの変更に左右されず、事前抽出データとページがずれないため。拡張機能は自身のページに `scripting.executeScript` で注入できないので、本文は読まず、タブの URL が拡張機能の `samples/` の下なら同梱の事前抽出データを使う。Page の URL は、環境ごとに変わる拡張機能の URL ではなく、リポジトリにあるそのファイルの URL にする
 
 Phase 3 で決めるもの：

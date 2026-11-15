@@ -117,9 +117,9 @@ export const JUDGE_PAIRS: readonly LabeledPair[] = [
         "The synchronous OPFS file calls, such as those on a sync access handle, can run only inside web workers, not on the main thread.",
     },
     concepts: ["Web Worker"],
-    expected: true,
+    expected: false,
     reason:
-      "同期の OPFS 呼び出しは Worker の中でしか使えないので、処理を Worker で動かすことがそのまま手立てになる",
+      "Worker が裏で動くという一般の事実で、同期の OPFS 呼び出しが Worker の中に限られる制約は消えない（sqlitewasm-worker-vs-opfs-sync と違い、その制約への手立てを述べていない）",
   },
   {
     id: "serviceworker-vs-offline",
