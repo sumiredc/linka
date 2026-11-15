@@ -1,0 +1,10 @@
+/* 吹き出しは中身の大きさに合わせて開くので、サイドパネル向けの高さの指定を外す */
+html,
+body,
+#root {
+  height: auto;
+}
+
+body {
+  background: #fff;
+}
