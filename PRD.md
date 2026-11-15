@@ -72,7 +72,7 @@ Linka は、読んだページから概念・主張（課題・解決策など�
 | Relate Wasm | `@relate/relate-wasm`（v1.0.x）。永続化できるのは OPFS（`opfs://<name>`）だけで、**dedicated worker の中で開く必要がある**。`.rl` ファイルは読めない。ストアの import/export API は無い | relate リポジトリ `docs/api/wasm/spec.md`, ADR-0145 |
 | Relate Wasm | `execute` は同期で、結果は JSON 文字列。エラーは例外でなく `error` に返る。トランザクション API は無い。panic 後のインスタンスは使えない | 同上 |
 | Relate Wasm | 同じ OPFS ストアを開けるのは同時に 1 か所だけ（`storage locked`）。MV3 の service worker からは dedicated worker を作れない | ADR-0145、MV3 の service worker の制約 |
-| Prompt API | Chrome 138 以降の拡張機能で利用可能。**Web Worker からは使えない。** offscreen document とサイドパネルでは使える（実記事 1 本の抽出が 2〜4 秒。ただし約 30,000 文字を 1 回で渡すと、環境によっては 90 秒を超えた（2026-11-15、§7））。対応言語は en / ja / es / de / fr | developer.chrome.com/docs/ai/prompt-api、`spikes/offscreen-clip` |
+| Prompt API | Chrome 138 以降の拡張機能で利用可能。**Web Worker からは使えない。** offscreen document とサイドパネルでは使える（実記事 1 本の抽出が 2〜4 秒。ただし約 30,000 文字を 1 回で渡すと、環境によっては 90 秒を超えた（2026-11-15、§7））。対応言語は en / ja / es / de / fr | developer.chrome.com/docs/ai/prompt-api、実装前の検証用コード（コミット `1672857`） |
 | Prompt API | 必要環境：空きディスク 22GB 以上、VRAM 4GB 超 または RAM 16GB 以上。審査員の環境の 2〜4 割では動かないと見込む | 同上（割合は推定） |
 | Prompt API | コンテキストは 9216 トークン（`contextWindow` と `inputQuota`）。英語の本文は約 4.5 文字で 1 トークン。長い記事は分割が必要 | Chrome 157（macOS）で実測（2026-11-15） |
 | Prompt API | 同じセッションに 2 回目の `prompt` を送ると、`kErrorUnknown` ですぐ失敗することがある（Cypher の作り直しで 4 回中 4 回）。`clone` したセッションへの 1 回目は通る | 同上 |
@@ -265,7 +265,7 @@ flowchart LR
 
 - MV3。権限は `sidePanel`, `offscreen`, `activeTab`, `scripting`, `storage`、それにアイコンの記憶済みの印のための `tabs`（`tabs` が無いと、ほかのタブの URL が読めない。Chrome 157 で、タブの切り替え・移動のどちらでも `tab.url` が空だった。入れるとインストール時に「閲覧履歴の読み取り」の警告が出るが、受け入れる。2026-11-15 に決定）。選択範囲のクリップを入れるときは `contextMenus` を足す。CSP に `'wasm-unsafe-eval'`。`minimum_chrome_version: "138"`。ツールバーのアイコンは `action.default_popup` で吹き出しを開く
 - 使う技術は §7.1 のとおり
-- DB は offscreen document（reason は `WORKERS`）1 か所だけが持ち、その中の dedicated worker で Relate を開く。service worker は offscreen document を 1 つだけ作る役で、依頼は取り次がない。吹き出しとサイドパネルは、service worker に offscreen document を用意させてから、依頼を offscreen document に直接送る。DB の変化は offscreen document から拡張機能のすべてのページに直接知らせる。service worker は Chrome に休止させられることがあり、長い依頼の返事を service worker が持っていると、書き込みは済んだのに返事だけが失われるため。吹き出しが閉じても処理は offscreen document で続き、完了はサイドパネルに通知する（`spikes/offscreen-clip` で確認済み）
+- DB は offscreen document（reason は `WORKERS`）1 か所だけが持ち、その中の dedicated worker で Relate を開く。service worker は offscreen document を 1 つだけ作る役で、依頼は取り次がない。吹き出しとサイドパネルは、service worker に offscreen document を用意させてから、依頼を offscreen document に直接送る。DB の変化は offscreen document から拡張機能のすべてのページに直接知らせる。service worker は Chrome に休止させられることがあり、長い依頼の返事を service worker が持っていると、書き込みは済んだのに返事だけが失われるため。吹き出しが閉じても処理は offscreen document で続き、完了はサイドパネルに通知する（実装前の検証用コード（コミット `1672857`）で確認済み）
 - worker へのメッセージは 1 件ずつ処理する。panic（`isWasmTrap`）が起きたら worker を作り直す
 - Prompt API は offscreen document から呼ぶ（Worker からは使えないため）。抽出と判定には `responseConstraint` を使い、zod が作る JSON Schema をそのまま渡す（`$schema`・`minLength`・`maxLength`・`maxItems` を含めて受け付けられ、出力は zod の検査に通った）。概念名には説明の注記（例：`OPFS (Origin Private File System)`）が付くことがあるので、プロンプトで「名前だけ」と指示する（指示すると 39 個中 0 個、指示しないと 46 個中 1 個）。1 回の `prompt` ごとに、指示を入れたセッションを `clone` して使う（§4）。本文は約 8,000 文字ずつに分けて抽出する。入力の上限（出力に 700 トークンを残して 2 割の余裕を引くと約 6,700 トークン、英語で約 30,000 文字）までは入るが、約 30,000 文字を 1 回で読ませると、遅い環境では 1 回の打ち切り（90 秒）を超えて失敗した。GPU / CPU のどちらで動くかは Chrome が決め、拡張機能からは選べないので、遅い環境でも各回が打ち切りの内に終わる短さにする。回数は増えるが、進み具合（part n of m）が見える。8,000 文字は出発点で、offscreen document のコンソールに出す 1 回ごとの所要時間を見て調整する（2026-11-15 に決定）
 - 抽出結果はコード側で、パラメータ付きの MERGE 文に変換して書き込む。質問（UC3）も、モデルには種類と対象を選ばせるだけで、Cypher はコードが作る
@@ -296,7 +296,7 @@ flowchart LR
 | `.rl` の作成と MCP | Relate CLI | 1.0.1（拡張機能の Wasm と同じ版） | `data/linka.rl` の作成と、UC4 の MCP 接続に使う。公式のインストーラ（`curl -sSfL https://relatedb.ai/install.sh \| bash`）が、署名と checksum を確かめてから `~/.local/bin/relate` に入れる。sudo は要らない。インストーラは常に最新版を入れるので、版を固定したいときは GitHub の Release `v1.0.1` から `relate-darwin-arm64` などを直接取る。CLI は初期設定で利用状況を送信するので、README では `DO_NOT_TRACK=1` か `relate telemetry off` を案内する | macOS（arm64）で `npm run store`、`relate serve --mcp stdio`、Claude Code と Codex からの問い合わせ |
 | ライセンス | MIT | — | ハッカソンの推奨 | — |
 
-リポジトリの構成は 1 つのパッケージとし、`src/` の下を動く場所ごとに分ける：`background/`（service worker）、`offscreen/`（DB と AI）、`popup/`、`sidepanel/`、`content/`（ページの読み取り）、`shared/`（メッセージの型とスキーマ）。デモデータは `seed/`、同梱するストアは `data/` に置く。`spikes/` は参考として残す。
+リポジトリの構成は 1 つのパッケージとし、`src/` の下を動く場所ごとに分ける：`background/`（service worker）、`offscreen/`（DB と AI）、`popup/`、`sidepanel/`、`content/`（ページの読み取り）、`shared/`（メッセージの型とスキーマ）。デモデータは `seed/`、同梱するストアは `data/` に置く。
 
 ---
 
@@ -376,9 +376,9 @@ W1 のスパイクで Nano の Cypher 生成の成功率が低い（10 問中 5 
 | Nano が書く Cypher が壊れる | **解消（2026-11-15）。** 成功率が 10 問中 2 問だったので、Cypher はコードが作る方式に切り替えた（§11、UC3） |
 | 長い記事がコンテキストに入らない | 本文の主要部分だけを取り、分割して抽出する |
 | Relate 1.0.x の変更（11/11 公開、更新が速い） | バージョンを固定し、README に確認済みのバージョンを書く |
-| OPFS のロックで 2 つ目のウィンドウが使えない | **解消（2026-11-15）。** DB を offscreen document 1 か所に置き、サイドパネルはそこへ問い合わせる。`spikes/offscreen-clip` で、2 つのサイドパネルから同時に問い合わせられることを確認した |
-| 拡張機能のページから OPFS の Worker が使えない | **解消（2026-11-15）。** `spikes/relate-opfs` で、拡張機能のページから起動した dedicated worker で OPFS に書き込めること、ページの開き直し・ブラウザの再起動後も残ること、2 か所目は `storage locked` になることを確認した（Playwright の Chromium 159 での自動確認に加え、Chrome 157 の実際のサイドパネルでも、閉じて開き直したあと・Chrome を再起動したあとに件数が変わらないことを手動で確認した） |
-| サイドパネルを開かずに記憶できない（吹き出しは閉じると止まる） | **解消（2026-11-15）。** `spikes/offscreen-clip` で、吹き出しを閉じても offscreen document で記憶が最後まで終わること、offscreen document で Gemini Nano が実際の記事から抽出できること（2〜4 秒）、35 秒放置しても offscreen document が残ること、ブラウザの再起動後もデータが残ることを確認した（Playwright の Chromium での自動確認と、Chrome での手動確認） |
+| OPFS のロックで 2 つ目のウィンドウが使えない | **解消（2026-11-15）。** DB を offscreen document 1 か所に置き、サイドパネルはそこへ問い合わせる。実装前の検証用コード（コミット `1672857`）で、2 つのサイドパネルから同時に問い合わせられることを確認した |
+| 拡張機能のページから OPFS の Worker が使えない | **解消（2026-11-15）。** 実装前の検証用コード（コミット `bc4fd3a`）で、拡張機能のページから起動した dedicated worker で OPFS に書き込めること、ページの開き直し・ブラウザの再起動後も残ること、2 か所目は `storage locked` になることを確認した（Playwright の Chromium 159 での自動確認に加え、Chrome 157 の実際のサイドパネルでも、閉じて開き直したあと・Chrome を再起動したあとに件数が変わらないことを手動で確認した） |
+| サイドパネルを開かずに記憶できない（吹き出しは閉じると止まる） | **解消（2026-11-15）。** 実装前の検証用コード（コミット `1672857`）で、吹き出しを閉じても offscreen document で記憶が最後まで終わること、offscreen document で Gemini Nano が実際の記事から抽出できること（2〜4 秒）、35 秒放置しても offscreen document が残ること、ブラウザの再起動後もデータが残ることを確認した（Playwright の Chromium での自動確認と、Chrome での手動確認） |
 
 ## 13. 未決事項（Phase 1 で決める）
 

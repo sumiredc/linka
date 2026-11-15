@@ -254,7 +254,7 @@ npm run build       # dist/
 npm run dev         # rebuild dist/ on change; reload the extension on chrome://extensions
 ```
 
-The source is under `src/`, one folder per place it runs: `background/` (service worker), `offscreen/` (the Relate database and Gemini Nano), `popup/`, `sidepanel/`, `content/` (reads the page) and `shared/`. `spikes/` holds the feasibility checks, kept for reference and not part of the build.
+The source is under `src/`, one folder per place it runs: `background/` (service worker), `offscreen/` (the Relate database and Gemini Nano), `popup/`, `sidepanel/`, `content/` (reads the page) and `shared/`.
 
 ### Manual checks on `dev.html`
 
@@ -309,15 +309,9 @@ Licenses are taken from each package's `package.json`; transitive dependencies a
 - **Gemini Nano** (Chrome Prompt API) runs at runtime, on device, for extraction, `ADDRESSES` judging and choosing the question type.
 - **Claude Code** and **Gemini** were used during development.
 
-### New work and reused code
+### New work
 
-The project was started on or after 2026-11-11; the first commit is dated 2026-11-15. The two feasibility checks in `spikes/` were written in this repository before the extension itself, and the production code reuses parts of them:
-
-| From | To | What |
-|---|---|---|
-| `spikes/offscreen-clip/src/relate.worker.ts` (and `spikes/relate-opfs/src/relate.worker.ts`) | `src/offscreen/relate.worker.ts` | The dedicated worker that initializes Relate Wasm and opens the OPFS or in-memory store |
-| `spikes/offscreen-clip/public/background.js` | `src/background/index.ts`, `src/background/offscreen.ts` | Creating a single offscreen document with the `WORKERS` reason |
-| `spikes/*/vite.config.ts` | `vite.config.ts` | Plain Vite with relative `base`, one HTML entry per extension page, ES-module workers |
+The project was started on or after 2026-11-11; the first commit is dated 2026-11-15. All code in this repository was written for this hackathon.
 
 ## License
 
