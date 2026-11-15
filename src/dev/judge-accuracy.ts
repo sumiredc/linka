@@ -103,7 +103,12 @@ export async function runJudge(
   api: LanguageModelStatic | null,
   instructions: string,
   pairs: readonly LabeledPair[],
-  options: { timeoutMs?: number; onPair?(pair: number, pairs: number): void } = {},
+  options: {
+    timeoutMs?: number;
+    /** 指示の版に合う答えの形（JUDGE_RESPONSE_CONSTRAINTS）。省くと本番の版の形 */
+    responseConstraint?: object;
+    onPair?(pair: number, pairs: number): void;
+  } = {},
 ): Promise<JudgeRun> {
   const opened = await openJudgeSession(api, instructions);
   if (!opened.ok) return { ok: false, message: `${opened.error.kind}: ${opened.error.message}` };
@@ -116,6 +121,7 @@ export async function runJudge(
         opened.base,
         toCandidate(pair),
         options.timeoutMs ?? JUDGE_TIMEOUT_MS,
+        options.responseConstraint,
       );
       outcomes.push({ id: pair.id, seconds: (performance.now() - started) / 1000, result });
     }
