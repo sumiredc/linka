@@ -23,7 +23,10 @@ function interleave<T>(lists: readonly (readonly T[])[]): T[] {
  *
  * - Concept は {@link normalizeConceptKey} の key で 1 つにし、最初に出た名前と分類を使う。
  *   Claim と関係から参照する名前も、その名前に揃える。key が空になる名前は捨てる
- * - Person は {@link normalizePersonName} で揃えて重複を除く
+ * - 上限を超える Concept は、Claim と関係からの参照が少ないものから捨てる。
+ *   `concepts` に残らなかった Concept（分類の無いものを含む）への参照と、その端を失った関係も捨てる
+ *   （グラフに分類の無い Concept を作らないため）
+ * - Person は {@link normalizePersonName} で揃えて重複を除き、揃えてスキーマの長さを超えた名前は捨てる
  * - Claim は空白を揃えた文が同じなら 1 つにし（Claim の id と同じ判定）、参照する Concept を合わせる。種類は最初のものを使う
  * - 関係は向きを区別せずに重複を除き、同じ Concept 同士の関係は捨てる
  * - summary は最初の空でないもの（記事の冒頭を含む分割の要約）を使う
@@ -65,25 +68,41 @@ export function mergeExtractions(extractions: readonly Extraction[]): Extraction
     if (!related.has(pair)) related.set(pair, [a, b]);
   }
 
+  // NFKC で 1 文字が数文字に広がり、スキーマの長さを超える名前がありうる
   const authors = [
     ...new Set(interleave(extractions.map((e) => e.authors)).map(normalizePersonName)),
-  ].filter((name) => name !== "");
+  ].filter((name) => name !== "" && name.length <= EXTRACTION_LIMITS.authorNameLength);
+
+  const keptClaims = [...claims.values()].slice(0, EXTRACTION_LIMITS.claims);
+  const references = new Map<string, number>();
+  const count = (key: string) => references.set(key, (references.get(key) ?? 0) + 1);
+  for (const { conceptKeys } of keptClaims) for (const key of conceptKeys) count(key);
+  for (const [from, to] of related.values()) {
+    count(from);
+    count(to);
+  }
+  // 参照の多いものから残す。Array.prototype.sort は安定なので、同数なら interleave の順のまま
+  const kept = new Map(
+    [...concepts]
+      .sort(([a], [b]) => (references.get(b) ?? 0) - (references.get(a) ?? 0))
+      .slice(0, EXTRACTION_LIMITS.concepts),
+  );
 
   const nameOf = (key: string) => names.get(key) ?? key;
   return {
     summary: extractions.map((e) => e.summary.trim()).find((summary) => summary !== "") ?? "",
-    concepts: [...concepts]
-      .slice(0, EXTRACTION_LIMITS.concepts)
-      .map(([key, category]) => ({ name: nameOf(key), category })),
+    concepts: [...kept].map(([key, category]) => ({ name: nameOf(key), category })),
     authors: authors.slice(0, EXTRACTION_LIMITS.authors),
-    claims: [...claims.values()]
-      .slice(0, EXTRACTION_LIMITS.claims)
-      .map(({ claim, conceptKeys }) => ({
-        statement: claim.statement,
-        type: claim.type,
-        concepts: [...conceptKeys].slice(0, EXTRACTION_LIMITS.conceptsPerClaim).map(nameOf),
-      })),
+    claims: keptClaims.map(({ claim, conceptKeys }) => ({
+      statement: claim.statement,
+      type: claim.type,
+      concepts: [...conceptKeys]
+        .filter((key) => kept.has(key))
+        .slice(0, EXTRACTION_LIMITS.conceptsPerClaim)
+        .map(nameOf),
+    })),
     relatedConcepts: [...related.values()]
+      .filter(([from, to]) => kept.has(from) && kept.has(to))
       .slice(0, EXTRACTION_LIMITS.relatedConcepts)
       .map(([from, to]) => ({ from: nameOf(from), to: nameOf(to) })),
   };

@@ -12,6 +12,17 @@ const empty: Extraction = {
 
 const part = (fields: Partial<Extraction>): Extraction => ({ ...empty, ...fields });
 
+const listed = (...names: string[]) => names.map((name) => ({ name, category: "topic" }));
+
+/** claims と relatedConcepts が参照する概念名のうち、concepts に無いもの */
+function unlistedReferences(extraction: Extraction): string[] {
+  const names = new Set(extraction.concepts.map((c) => c.name));
+  return [
+    ...extraction.claims.flatMap((c) => c.concepts),
+    ...extraction.relatedConcepts.flatMap((r) => [r.from, r.to]),
+  ].filter((name) => !names.has(name));
+}
+
 describe("mergeExtractions", () => {
   it("merges concepts whose names share a key into one, keeping the first name and category", () => {
     const merged = mergeExtractions([
@@ -49,7 +60,10 @@ describe("mergeExtractions", () => {
 
   it("merges claims with the same statement up to whitespace and joins their concepts", () => {
     const merged = mergeExtractions([
-      part({ claims: [{ statement: "OPFS is fast.", type: "benefit", concepts: ["OPFS"] }] }),
+      part({
+        concepts: listed("OPFS", "SQLite"),
+        claims: [{ statement: "OPFS is fast.", type: "benefit", concepts: ["OPFS"] }],
+      }),
       part({
         claims: [{ statement: " OPFS  is fast. ", type: "fact", concepts: ["opfs", "SQLite"] }],
       }),
@@ -82,7 +96,10 @@ describe("mergeExtractions", () => {
 
   it("treats related concept pairs as undirected and drops a concept related to itself", () => {
     const merged = mergeExtractions([
-      part({ relatedConcepts: [{ from: "OPFS", to: "SQLite" }] }),
+      part({
+        concepts: listed("OPFS", "SQLite", "WebAssembly"),
+        relatedConcepts: [{ from: "OPFS", to: "SQLite" }],
+      }),
       part({
         relatedConcepts: [
           { from: "sqlite", to: "opfs" },
@@ -136,6 +153,74 @@ describe("mergeExtractions", () => {
     });
     const merged = mergeExtractions([full("A"), full("B"), full("C")]);
     expect(ExtractionSchema.safeParse(merged).success).toBe(true);
+  });
+
+  it("keeps the most referenced concepts when there are more than the limit, and drops references to the rest", () => {
+    const names = (prefix: string) => Array.from({ length: 15 }, (_, i) => `${prefix}${i}`);
+    const chunk = (prefix: string, referenced: string[]) =>
+      part({
+        concepts: listed(...names(prefix)),
+        claims: [{ statement: `${prefix} claim.`, type: "fact", concepts: referenced }],
+        relatedConcepts: [{ from: `${prefix}0`, to: `${prefix}14` }],
+      });
+    const merged = mergeExtractions([
+      chunk("A", ["A14", "A13", "A0"]),
+      chunk("B", ["B14", "B13", "B12", "B0", "A0"]),
+    ]);
+    expect(merged.concepts).toHaveLength(EXTRACTION_LIMITS.concepts);
+    // A0 は 3 回、B0・A14・B14 は 2 回参照される。同数なら interleave の順
+    expect(merged.concepts.slice(0, 4).map((c) => c.name)).toEqual(["A0", "B0", "A14", "B14"]);
+    expect(merged.concepts.map((c) => c.name)).toEqual(
+      expect.arrayContaining(["A13", "B0", "B14", "B13", "B12"]),
+    );
+    expect(unlistedReferences(merged)).toEqual([]);
+  });
+
+  it("drops references to concepts that no chunk lists, and relations that lose an end", () => {
+    const merged = mergeExtractions([
+      part({
+        concepts: listed("OPFS"),
+        claims: [{ statement: "OPFS is fast.", type: "fact", concepts: ["OPFS", "SQLite"] }],
+        relatedConcepts: [{ from: "OPFS", to: "SQLite" }],
+      }),
+    ]);
+    expect(merged.claims[0]?.concepts).toEqual(["OPFS"]);
+    expect(merged.relatedConcepts).toEqual([]);
+  });
+
+  it("keeps at most the per-claim limit of concepts when one claim is merged from two chunks", () => {
+    const names = ["C0", "C1", "C2", "C3", "C4", "C5", "C6"];
+    const merged = mergeExtractions([
+      part({
+        concepts: listed(...names),
+        claims: [{ statement: "Same.", type: "fact", concepts: names.slice(0, 4) }],
+      }),
+      part({ claims: [{ statement: "Same.", type: "fact", concepts: names.slice(3) }] }),
+    ]);
+    expect(merged.claims[0]?.concepts).toEqual(names.slice(0, EXTRACTION_LIMITS.conceptsPerClaim));
+    expect(ExtractionSchema.safeParse(merged).success).toBe(true);
+  });
+
+  it("drops an author whose name grows past the schema limit when normalised", () => {
+    // ㍿ は NFKC で 4 文字（株式会社）になる
+    const long = "㍿".repeat(21);
+    const merged = mergeExtractions([part({ authors: [long, "Ada"] })]);
+    expect(merged.authors).toEqual(["Ada"]);
+    expect(ExtractionSchema.safeParse(merged).success).toBe(true);
+  });
+
+  it("drops a claim whose statement is only whitespace", () => {
+    const merged = mergeExtractions([
+      part({ claims: [{ statement: " \n ", type: "fact", concepts: [] }] }),
+    ]);
+    expect(merged.claims).toEqual([]);
+  });
+
+  it("trims the whitespace around a concept name", () => {
+    const merged = mergeExtractions([
+      part({ concepts: [{ name: " OPFS ", category: "storage" }] }),
+    ]);
+    expect(merged.concepts).toEqual([{ name: "OPFS", category: "storage" }]);
   });
 
   it("returns an empty extraction for no chunks", () => {
