@@ -5,6 +5,7 @@ import demoJson from "../seed/demo.json?raw";
 import { toCypherScript } from "../src/shared/cypher";
 import type { Clip } from "../src/shared/extraction";
 import { buildAddressesStatement, buildClipStatements } from "../src/shared/graph-statements";
+import { loadSample, samplePageOf } from "../src/shared/sample-page";
 import {
   DemoDataSchema,
   resolveAddresses,
@@ -29,6 +30,7 @@ const samplePages = Object.keys(
 );
 const demo = DemoDataSchema.parse(JSON.parse(demoJson));
 const REPOSITORY_FILES = "https://github.com/sumiredc/linka/blob/main/public/";
+const EXTENSION_ROOT = "chrome-extension://abcdefghijklmnop/";
 
 describe("public/samples", () => {
   it("bundles 2 to 3 sample pages", () => {
@@ -59,6 +61,15 @@ describe.each(samples)("$file", ({ file, data }) => {
 
   it("links to the demo graph with at least one judged pair", () => {
     expect(SampleSchema.parse(data).addresses.length).toBeGreaterThan(0);
+  });
+
+  it("loads as a clip of its repository URL when its page is open in the extension", async () => {
+    const { path, url } = SampleSchema.parse(data);
+    const page = samplePageOf(`${EXTENSION_ROOT}${path}`, EXTENSION_ROOT);
+    expect(page?.url).toBe(url);
+    if (!page) return;
+    const serve = async () => new Response(JSON.stringify(data));
+    expect((await loadSample(page, "2026-11-15T09:00:00Z", serve)).clip.url).toBe(url);
   });
 });
 
