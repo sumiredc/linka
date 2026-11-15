@@ -33,9 +33,9 @@ export type JudgeInstructionVariant = keyof typeof JUDGE_INSTRUCTION_VARIANTS;
 
 /**
  * 本番の判定で使う指示。dev.html の「UC2 judge accuracy」で版ごとの一致率を Chrome + Nano で測り、良い方に切り替える。
- * strict はまだ実機で測っていないので、測るまで current のままにする
+ * 2026-11-16 の測定（21 組）で strict が一致 13/21・FP 7・FN 1、current が 10/21・FP 9・FN 2 だったので strict を使う
  */
-export const PRODUCTION_JUDGE_VARIANT: JudgeInstructionVariant = "current";
+export const PRODUCTION_JUDGE_VARIANT: JudgeInstructionVariant = "strict";
 
 export const JUDGE_INSTRUCTIONS = JUDGE_INSTRUCTION_VARIANTS[PRODUCTION_JUDGE_VARIANT];
 
