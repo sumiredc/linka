@@ -100,7 +100,11 @@ const COPY_ANNOUNCEMENT: Record<CopyState, string> = {
   failed: "Could not copy. Select the text and copy it yourself.",
 };
 
-function Command({ text }: { text: string }) {
+/**
+ * label はボタンの名前に使う（「Copy the store command」）。ボタンが並ぶので、名前でどれをコピーするかを区別する。
+ * コピーできたかは、見えている文字の代わりに status で読み上げる
+ */
+function Command({ text, label }: { text: string; label: string }) {
   const [state, setState] = useState<CopyState>("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -120,7 +124,13 @@ function Command({ text }: { text: string }) {
       <pre>
         <code>{text}</code>
       </pre>
-      <button type="button" className={styles.copy} data-state={state} onClick={copy}>
+      <button
+        type="button"
+        className={styles.copy}
+        data-state={state}
+        aria-label={`Copy ${label}`}
+        onClick={copy}
+      >
         {COPY_TEXT[state]}
       </button>
       <span role="status" className={styles.visuallyHidden}>
@@ -179,7 +189,7 @@ function AgentTabs() {
         aria-labelledby="agent-tab-claude"
         hidden={agent !== "claude"}
       >
-        <Command text={CLAUDE_CODE_COMMAND} />
+        <Command text={CLAUDE_CODE_COMMAND} label="the Claude Code command" />
         <p className={styles.note}>
           Run it in your project directory (add <code>--scope user</code> to use it in every
           project). Check it with <code>claude mcp list</code>.
@@ -191,7 +201,7 @@ function AgentTabs() {
         aria-labelledby="agent-tab-codex"
         hidden={agent !== "codex"}
       >
-        <Command text={CODEX_COMMAND} />
+        <Command text={CODEX_COMMAND} label="the Codex command" />
         <p className={styles.note}>
           Writes <code>[mcp_servers.linka]</code> to <code>~/.codex/config.toml</code>; running it
           again replaces it. Restart Codex and run <code>/mcp</code> to see linka.
@@ -234,16 +244,22 @@ export function AgentDialog({
           <span>
             Make a Relate file. This loads the newest <code>linka-export*.cypher</code> in{" "}
             <code>~/Downloads</code>, so a re-export saved as <code>linka-export (1).cypher</code>{" "}
-            is used too. If your browser saves downloads elsewhere, change that path.
+            is used too. If your browser saves downloads elsewhere, change the path on the first
+            line.
           </span>
-          <Command text={BUILD_STORE_COMMAND} />
+          <Command text={BUILD_STORE_COMMAND} label="the store command" />
           <p className={styles.note}>
             If it says <code>Operation not permitted</code>, your terminal can't read{" "}
             <code>~/Downloads</code>. Either allow it in System Settings → Privacy &amp; Security →
-            Files and Folders → Downloads (or Full Disk Access) and restart the terminal, or move
-            the file to <code>~/linka/{EXPORT_FILE_NAME}</code> in Finder and run:
+            Files and Folders → your terminal app → Downloads Folder (or Full Disk Access) and
+            restart the terminal, or in Finder move the file to <code>~/linka</code> (create the
+            folder if needed), rename it to <code>{EXPORT_FILE_NAME}</code> if it is, say,{" "}
+            <code>linka-export (1).cypher</code>, and run:
           </p>
-          <Command text={BUILD_STORE_FROM_LINKA_COMMAND} />
+          <Command
+            text={BUILD_STORE_FROM_LINKA_COMMAND}
+            label="the command for a file in ~/linka"
+          />
         </li>
         <li>
           <span>
@@ -258,7 +274,7 @@ export function AgentDialog({
         </li>
         <li>
           <span>Ask your agent.</span>
-          <Command text={AGENT_PROMPT} />
+          <Command text={AGENT_PROMPT} label="the prompt" />
         </li>
       </ol>
       <p className={styles.note}>
