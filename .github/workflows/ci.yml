@@ -15,9 +15,8 @@ concurrency:
 jobs:
   check:
     name: lint, typecheck, unit test, build
-    # aidd-infra の ARC runner scale set（カスタムラベルは付けられないので scale set 名で指定する）。
-    # 公開前に GitHub-hosted runner へ移す（#4）
-    runs-on: arc-runner-linka
+    # 公開リポジトリで self-hosted runner を使うと、外部の PR が自分の環境でコードを動かせるので GitHub-hosted にする
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
