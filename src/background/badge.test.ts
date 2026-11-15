@@ -8,6 +8,7 @@ import {
   canBeClipped,
   createBadgeRefresher,
   NO_BADGE,
+  refreshesOnUpdate,
   tabsShowing,
 } from "./badge";
 
@@ -45,6 +46,21 @@ describe("canBeClipped", () => {
     expect(canBeClipped(`${ROOT}sidepanel.html`, ROOT)).toBe(false);
     expect(canBeClipped("https://chromewebstore.google.com/detail/x", ROOT)).toBe(false);
     expect(canBeClipped("", ROOT)).toBe(false);
+  });
+});
+
+describe("refreshesOnUpdate", () => {
+  it("refreshes when the tab moves to another URL", () => {
+    expect(refreshesOnUpdate({ url: "https://example.com/b" })).toBe(true);
+  });
+
+  it("refreshes when a page finishes loading, as a reload clears the badge without a URL change", () => {
+    expect(refreshesOnUpdate({ status: "complete" })).toBe(true);
+  });
+
+  it("does not refresh on other updates", () => {
+    expect(refreshesOnUpdate({ status: "loading" })).toBe(false);
+    expect(refreshesOnUpdate({})).toBe(false);
   });
 });
 

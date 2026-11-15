@@ -22,6 +22,14 @@ export function canBeClipped(tabUrl: string, extensionRoot: string): boolean {
   return unreadableUrlReason(tabUrl, true) === null;
 }
 
+/**
+ * タブの更新で印を付け直すか。Chrome は別の文書へ移ると印を消すが、再読み込みでは URL が変わらず
+ * `url` が来ないので、読み込みの完了でも付け直す
+ */
+export function refreshesOnUpdate(changeInfo: { url?: string; status?: string }): boolean {
+  return changeInfo.url !== undefined || changeInfo.status === "complete";
+}
+
 /** isClipped の返事を印にする。返事が失敗なら null（今の印を変えない） */
 export function badgeOf(response: DbResponse<ClippedPage | null>): Badge | null {
   if (!response.ok) return null;

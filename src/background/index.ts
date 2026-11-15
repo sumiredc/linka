@@ -7,7 +7,7 @@ import {
   isFromExtensionPage,
   isMessageFor,
 } from "../shared/messages";
-import { type Badge, createBadgeRefresher, tabsShowing } from "./badge";
+import { type Badge, createBadgeRefresher, refreshesOnUpdate, tabsShowing } from "./badge";
 import { createOffscreenEnsurer } from "./offscreen";
 
 const EXTENSION_ROOT = chrome.runtime.getURL("");
@@ -74,7 +74,7 @@ chrome.tabs.onActivated.addListener(({ tabId }) => {
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.url !== undefined) void refreshBadge(tabId, tab.url);
+  if (refreshesOnUpdate(changeInfo)) void refreshBadge(tabId, tab.url);
 });
 
 // offscreen document が拡張機能のすべてのページへ送る記憶の結果は、service worker にも届く
