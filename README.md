@@ -86,11 +86,11 @@ The three bundled sample pages are inside the extension. Find Linka's ID on `chr
 - `chrome-extension://<extension-id>/samples/crdt-notes-sync.html`
 - `chrome-extension://<extension-id>/samples/sqlite-worker-owner.html`
 
-Each sample's solutions connect to concerns already in the demo graph, so the popup shows new connections.
+Each sample's solutions connect to concerns already in the demo graph, so the popup shows suggested connections.
 
 ### Use
 
-1. **Clip a page.** Open an article and click the Linka icon. Clipping starts right away: read the page → extract concepts and claims → save to the graph → find connections to other pages. You can close the popup; clipping continues. When it finishes, the popup lists the counts and the new connections, and the icon shows that the page is clipped. Clicking the icon on a clipped page offers **Clip again** (replaces what was extracted from that page) and **Open side panel**. Extraction asks Gemini Nano for English input and output, so English pages work best.
+1. **Clip a page.** Open an article and click the Linka icon. Clipping starts right away: read the page → extract concepts and claims → save to the graph → find connections to other pages. You can close the popup; clipping continues. When it finishes, the popup lists the counts and the suggested connections, and the icon shows that the page is clipped. Clicking the icon on a clipped page offers **Clip again** (replaces what was extracted from that page) and **Open side panel**. Extraction asks Gemini Nano for English input and output, so English pages work best.
 2. **Browse the graph.** In the side panel, click a node to see its details.
 3. **Ask a question** (needs Gemini Nano). Type an English question and press ⌘/Ctrl + Enter. For example:
    - What concerns are there about OPFS?
@@ -239,6 +239,7 @@ relate telemetry status
 ## Limitations
 
 - Extraction is an estimate by a small on-device model and can be wrong. There is no editor for the graph.
+- Suggested connections between pages can be wrong too. On 21 labeled pairs from the demo graph, Gemini Nano agreed on 13 and called about half of the unrelated pairs connected (measured on `dev.html` → **UC2 judge accuracy**).
 - No questions without Gemini Nano, and no fallback to a cloud model.
 - No sync between devices or with Neo4j / Aura; export is the way out.
 - Desktop Chrome 138+ only.
