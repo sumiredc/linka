@@ -42,13 +42,13 @@
       },
       "concern": {
         "page": "https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria",
-        "statement": "Data in best-effort storage can be evicted by the browser without asking the user when the device runs low on disk space."
+        "statement": "When the browser needs space, it evicts best-effort data without interrupting the user, so an app can lose its stored data without being asked."
       }
     },
     {
       "solution": {
-        "page": "https://docs.yjs.dev/",
-        "statement": "The y-indexeddb provider stores a Yjs document in IndexedDB so offline edits survive a page reload."
+        "page": "https://docs.yjs.dev/ecosystem/database-provider/y-indexeddb",
+        "statement": "The y-indexeddb provider stores Yjs shared data persistently in the browser, so changes are loaded from the local database the next time the session is joined."
       },
       "concern": {
         "page": "samples/keep-offline-data.html",

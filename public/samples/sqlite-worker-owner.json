@@ -10,7 +10,8 @@
       { "name": "Web Worker", "category": "platform" },
       { "name": "Web Locks API", "category": "api" },
       { "name": "Multiple tabs", "category": "constraint" },
-      { "name": "postMessage", "category": "api" }
+      { "name": "postMessage", "category": "api" },
+      { "name": "WebAssembly memory", "category": "constraint" }
     ],
     "authors": [],
     "claims": [
@@ -23,6 +24,11 @@
         "statement": "Open the database in one dedicated worker and send every tab's queries to it as messages, using a named Web Lock to choose the tab that runs the worker.",
         "type": "solution",
         "concepts": ["Web Worker", "Web Locks API", "SQLite"]
+      },
+      {
+        "statement": "Keeping the database in a file on OPFS lets SQLite read only the pages a query needs, so the dataset does not have to fit into WebAssembly memory.",
+        "type": "solution",
+        "concepts": ["SQLite", "OPFS", "WebAssembly memory"]
       },
       {
         "statement": "Routing queries through messages copies every result with structured clone, which adds overhead when there are many small queries.",
@@ -43,13 +49,23 @@
       },
       "concern": {
         "page": "https://sqlite.org/wasm/doc/trunk/persistence.md",
-        "statement": "An OPFS sync access handle locks its file, so only one connection at a time can use the database and other tabs get errors."
+        "statement": "A sync access handle locks its OPFS file exclusively, so tabs contend for the database and can get SQLITE_BUSY or locking errors."
+      }
+    },
+    {
+      "solution": {
+        "page": "samples/sqlite-worker-owner.html",
+        "statement": "Keeping the database in a file on OPFS lets SQLite read only the pages a query needs, so the dataset does not have to fit into WebAssembly memory."
+      },
+      "concern": {
+        "page": "https://v8.dev/blog/4gb-wasm-memory",
+        "statement": "4GB is the largest amount of memory possible with 32-bit pointers, so a WebAssembly program cannot hold more data than that in memory."
       }
     },
     {
       "solution": {
         "page": "https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API",
-        "statement": "A named Web Lock lets tabs elect a single owner for a shared resource while other tabs wait in a queue until it is released."
+        "statement": "Web Locks let tabs and workers of the same origin coordinate the use of a resource: while one holds a lock, other requests for it are queued until it is released."
       },
       "concern": {
         "page": "samples/sqlite-worker-owner.html",
