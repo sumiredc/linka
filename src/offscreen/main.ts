@@ -1,4 +1,5 @@
 // DB の唯一の持ち主。画面から直接届いた依頼を Relate の worker に渡し、DB の変化を全画面に知らせる
+import demoCypher from "../../seed/demo.cypher?raw";
 import {
   type DbResponse,
   failure,
@@ -19,6 +20,8 @@ const client = new DbClient({
   timeoutMs: REQUEST_TIMEOUT_MS,
   // Playwright の Chromium では terminate から約 2 秒でロックが外れた。余裕を見て 10 秒まで待つ
   lockRetry: { attempts: 40, delayMs: 250 },
+  // CLI が data/linka.rl を作るのと同じファイルを、文字列としてバンドルに含める
+  seed: demoCypher,
   createWorker: ({ onMessage, onError }) => {
     const worker = new Worker(new URL("./relate.worker.ts", import.meta.url), { type: "module" });
     worker.onmessage = (event: MessageEvent<WorkerResponse>) => onMessage(event.data);
