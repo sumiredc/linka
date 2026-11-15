@@ -51,6 +51,16 @@ describe("clip text", () => {
     expect(text).toContain("The clip itself is saved.");
   });
 
+  it("says some connections may have been saved when they could not be confirmed", () => {
+    const text = connectionsText({
+      ...summary,
+      connections: { kind: "unconfirmed", reason: "could not read" },
+    });
+    expect(text).toContain("may have been saved");
+    expect(text).toContain("(could not read)");
+    expect(text).not.toContain("not checked");
+  });
+
   it("names the other page of a new connection", () => {
     expect(connectionText(link, "https://example.com/a")).toBe(
       "“Use a worker.” addresses “The main thread blocks.” (Page B)",

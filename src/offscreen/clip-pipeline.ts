@@ -178,6 +178,8 @@ export class ClipPipeline {
    * 判定のどれかが失敗したら何も張らない
    */
   async #connect(target: ClipTarget, url: string): Promise<ConnectionsOutcome> {
+    /** ADDRESSES を書き始めたか。そのあとの失敗では「何も張っていない」と言えない */
+    let saving = false;
     try {
       const found = await this.#db.execute(buildAddressesCandidatesStatement(url));
       if (!found.ok) return notJudged(`could not look for candidates: ${dbError(found)}`);
@@ -189,11 +191,15 @@ export class ClipPipeline {
       });
       if (!judged.ok) return notJudged(judged.error.message);
       if (judged.links.length === 0) return { kind: "judged", links: [] };
+      saving = true;
       const written = await this.#db.execute(buildAddressesStatement(judged.links));
       if (!written.ok) {
-        // 張りかけた分を消す。消せなくても、残るのは Nano が解決すると答えた組だけ
-        await this.#db.execute(buildRemoveAddressesStatement(judged.links));
-        return notJudged(`could not save the connections: ${dbError(written)}`);
+        // 張りかけた分を消す。消しきれなくても、残るのは Nano が解決すると答えた組だけ
+        const removed = await runUndo(this.#db, [buildRemoveAddressesStatement(judged.links)]);
+        const reason = `could not save the connections: ${dbError(written)}`;
+        return removed
+          ? notJudged(reason)
+          : unconfirmed(`${reason}; some of the connections Nano approved may remain`);
       }
       const linked = new Set(judged.links.map((link) => `${link.solution}\n${link.concern}`));
       return {
@@ -203,7 +209,7 @@ export class ClipPipeline {
           .map(({ solution, concern }) => ({ solution, concern })),
       };
     } catch (error) {
-      return notJudged(messageOf(error));
+      return saving ? unconfirmed(messageOf(error)) : notJudged(messageOf(error));
     }
   }
 
@@ -319,7 +325,10 @@ export class ClipPipeline {
   async #readConnections(links: AddressesLink[]): Promise<ConnectionsOutcome> {
     if (links.length === 0) return { kind: "judged", links: [] };
     const response = await this.#db.execute(buildConnectionsStatement(links));
-    if (!response.ok) return notJudged(`could not read the connections: ${dbError(response)}`);
+    if (!response.ok) {
+      // 書いたあとなので「判定しなかった」ではない。張れたかどうかを確かめられなかった
+      return unconfirmed(`the connections were saved but could not be read: ${dbError(response)}`);
+    }
     const read: NewConnection[] = toAddressesCandidates(response.value.rows).map(
       ({ solution, concern }) => ({ solution, concern }),
     );
@@ -401,6 +410,10 @@ export class ClipPipeline {
 
 function notJudged(reason: string): ConnectionsOutcome {
   return { kind: "notJudged", reason };
+}
+
+function unconfirmed(reason: string): ConnectionsOutcome {
+  return { kind: "unconfirmed", reason };
 }
 
 function writeFailure(message: string, restored: boolean): ClipResult {

@@ -29,6 +29,9 @@ export function connectionsText(summary: ClipSummary): string {
   if (connections.kind === "notJudged") {
     return `Connections to other pages were not checked (${connections.reason}). The clip itself is saved.`;
   }
+  if (connections.kind === "unconfirmed") {
+    return `Some connections to other pages may have been saved, but Linka could not confirm which (${connections.reason}). The clip itself is saved.`;
+  }
   return connections.links.length === 0
     ? "No connections found to other pages."
     : `New connections: ${connections.links.length}`;

@@ -467,6 +467,32 @@ describe("a sample page", () => {
     });
   });
 
+  it("says the links were saved but not confirmed when they cannot be read back", async () => {
+    const t = setup({ model: null });
+    const original = t.conn.execute;
+    t.conn.execute = async (statement) =>
+      statement.query.includes("RETURN DISTINCT s.id AS solution")
+        ? failure("relate", "injected read failure")
+        : original(statement);
+    const result = await t.pipeline.clip(SAMPLE_TAB, "ignored", sampleBody());
+    expect(result).toMatchObject({
+      ok: true,
+      summary: {
+        connections: {
+          kind: "unconfirmed",
+          reason: expect.stringContaining("saved but could not be read"),
+        },
+      },
+    });
+    expect(
+      count(
+        t.db,
+        "MATCH (p:Page {url: $url})-[:ASSERTS]->(:Claim)-[r:ADDRESSES]-() RETURN count(r) AS n",
+        { url: SAMPLE_URL },
+      ),
+    ).toBe(2);
+  });
+
   it("keeps the same ADDRESSES when clipped again", async () => {
     const t = setup({ model: null });
     await t.pipeline.clip(SAMPLE_TAB, "ignored", sampleBody());
@@ -614,6 +640,44 @@ describe("connecting concerns and solutions across pages (UC2)", () => {
     const result = await t.pipeline.clip(PAGE, "Graph", text());
     expect(notJudgedReason(result)).toContain("could not save the connections");
     expect(dump(t.db)).toEqual(expected);
+  });
+
+  /** ADDRESSES の書き込みを（流してから）失敗させ、消す文を `removals` 回まで失敗させる */
+  function failSaving(t: ReturnType<typeof setup>, removals: number) {
+    t.conn.state.beforeWrite = (write, query) => {
+      if (query.includes("MERGE (s)-[:ADDRESSES]->(c)")) {
+        t.conn.state.faults.push({ write, when: "after" });
+      } else if (query.includes("[r:ADDRESSES]") && removals > 0) {
+        removals--;
+        t.conn.state.faults.push({ write, when: "before" });
+      }
+      return undefined;
+    };
+  }
+
+  it("tries the removal again when it fails once after saving fails", async () => {
+    const expected = await clippedWithoutConnections();
+    const t = setup({ model: new FakeModel([answer(FIRST)], "available", addressesMdn) });
+    failSaving(t, 1);
+    const result = await t.pipeline.clip(PAGE, "Graph", text());
+    expect(notJudgedReason(result)).toContain("could not save the connections");
+    expect(dump(t.db)).toEqual(expected);
+  });
+
+  it("says the approved connections may remain when they cannot be removed", async () => {
+    const t = setup({ model: new FakeModel([answer(FIRST)], "available", addressesMdn) });
+    failSaving(t, Number.POSITIVE_INFINITY);
+    const result = await t.pipeline.clip(PAGE, "Graph", text());
+    expect(result).toMatchObject({
+      ok: true,
+      summary: { connections: { kind: "unconfirmed" } },
+    });
+    if (!result.ok || result.summary.connections.kind !== "unconfirmed") return;
+    expect(result.summary.connections.reason).toContain("may remain");
+    // 残っているのは、Nano が解決すると答えた組だけ
+    expect(addressesFromPage(t.db)).toEqual([
+      { solution: claimId(PAGE, SOLUTION), concern: claimId(MDN_OPFS, MDN_CONCERN) },
+    ]);
   });
 
   it("does not take another page's clip while it is judging", async () => {
