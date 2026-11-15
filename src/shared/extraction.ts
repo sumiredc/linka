@@ -18,6 +18,7 @@ const ConceptNameSchema = z.string().min(1).max(60);
 export const EXTRACTION_LIMITS = {
   concepts: 20,
   authors: 5,
+  authorNameLength: 80,
   claims: 20,
   conceptsPerClaim: 5,
   relatedConcepts: 20,
@@ -34,7 +35,9 @@ export const ExtractionSchema = z.object({
       }),
     )
     .max(EXTRACTION_LIMITS.concepts),
-  authors: z.array(z.string().min(1).max(80)).max(EXTRACTION_LIMITS.authors),
+  authors: z
+    .array(z.string().min(1).max(EXTRACTION_LIMITS.authorNameLength))
+    .max(EXTRACTION_LIMITS.authors),
   claims: z
     .array(
       z.object({
