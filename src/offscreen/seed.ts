@@ -1,4 +1,4 @@
-// デモデータ（seed/demo.cypher）の初回投入で流す Cypher
+// デモデータ（seed/demo.cypher）の初回投入と「Reset to demo data」で流す Cypher
 import type { DbResponse, RelateResult } from "../shared/messages";
 
 /** グラフが空かを確かめる。全件は数えず、1 件でもあるかだけを見る */
@@ -10,4 +10,9 @@ export const EMPTINESS_QUERY = "MATCH (n) WITH n LIMIT 1 RETURN count(n) AS node
  */
 export function shouldSeed(check: DbResponse<RelateResult>): boolean {
   return check.ok && check.value.rows.length === 1 && check.value.rows[0]?.nodes === 0;
+}
+
+/** すべてのノードと関係を消してから seed を入れ直すスクリプト */
+export function resetScript(seed: string): string {
+  return `MATCH (n) DETACH DELETE n;\n${seed}`;
 }

@@ -11,7 +11,7 @@ import {
   type RelateResult,
   type StorageState,
 } from "../shared/messages";
-import { EMPTINESS_QUERY, shouldSeed } from "./seed";
+import { EMPTINESS_QUERY, resetScript, shouldSeed } from "./seed";
 import type { WorkerOp, WorkerRequest, WorkerResponse } from "./worker-protocol";
 
 export type WorkerPort = { post(request: WorkerRequest): void; terminate(): void };
@@ -35,7 +35,7 @@ export type DbClientOptions = {
   lockRetry?: { attempts: number; delayMs: number };
   onNotify?(notification: DbNotification): void;
   timers?: Timers;
-  /** 空の DB を開いたときに入れる Cypher スクリプト（`seed/demo.cypher`） */
+  /** 空の DB を開いたときに入れ、`resetToDemo` で入れ直す Cypher スクリプト（`seed/demo.cypher`） */
   seed?: string;
 };
 
@@ -119,7 +119,7 @@ export class DbClient {
   private async run(job: Job): Promise<void> {
     let op: WorkerOp;
     try {
-      op = toWorkerOp(job.request);
+      op = toWorkerOp(job.request, this.options.seed);
     } catch (error) {
       job.resolve(failure("exception", messageOf(error)));
       return;
@@ -214,7 +214,7 @@ export class DbClient {
     if (!shouldSeed(classifyCheck(check))) return null;
     const seeded = await this.call({ op: "executeScript", script: seed, params: null });
     if (isLost(seeded)) return this.lostWhileOpening(seeded);
-    // Relate のエラーで途中までしか入らなくても DB は使えるので、開けたことにする
+    // Relate のエラーで途中までしか入らなくても DB は使えるので、開けたことにする。Reset で入れ直せる
     this.notify({ type: "graphChanged" });
     return null;
   }
@@ -295,7 +295,11 @@ export class DbClient {
   }
 }
 
-function toWorkerOp(request: DbOp): WorkerOp {
+function toWorkerOp(request: DbOp, seed: string | undefined): WorkerOp {
+  if (request.kind === "resetToDemo") {
+    if (seed === undefined) throw new Error("no demo data is bundled to reset to");
+    return { op: "executeScript", script: resetScript(seed), params: null };
+  }
   const params = request.params ? JSON.stringify(request.params) : null;
   return request.kind === "execute"
     ? { op: "execute", query: request.query, params }
