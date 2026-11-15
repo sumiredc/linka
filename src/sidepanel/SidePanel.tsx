@@ -3,7 +3,9 @@ import { askDb } from "../shared/db";
 import type { StorageState } from "../shared/messages";
 import type { ModelStatus } from "../shared/model-status";
 import { AgentDialog, useAgentHandoff } from "./AgentDialog";
+import { AnswerView, AskForm, useAsk } from "./Ask";
 import { aiBadge } from "./ai-status";
+import { isOpenableUrl } from "./answer-view";
 import { ClipActivity, useLatestClipEvent } from "./ClipActivity";
 import { canExport } from "./export-graph";
 import { GraphCanvas } from "./GraphCanvas";
@@ -100,17 +102,30 @@ export function SidePanel() {
   const handoff = useAgentHandoff();
   const clipEvent = useLatestClipEvent();
   const highlight = useMemo(() => newConnectionsHighlight(clipEvent), [clipEvent]);
+  const question = useAsk();
 
   const view = graph.kind === "loading" ? null : graph.view;
   const exportable = canExport(view);
   const selected = (selectedId && view?.nodes.find((node) => node.id === selectedId)) || null;
-  const focus = useMemo(
-    () =>
-      view && selected
-        ? new Set([selected.id, ...neighborsOf(view, selected.id).map(({ node }) => node.id)])
-        : null,
-    [view, selected],
-  );
+  const answer = question.highlight;
+  const focus = useMemo(() => {
+    if (view && selected) {
+      return new Set([selected.id, ...neighborsOf(view, selected.id).map(({ node }) => node.id)]);
+    }
+    // 質問の答えがあれば、答えに含まれるノードのほかを薄くする
+    return answer && answer.nodes.size > 0 ? answer.nodes : null;
+  }, [view, selected, answer]);
+
+  // 答えに含まれるページのノードを押したら、そのページを新しいタブで開く（PRD UC3）。
+  // 選んだことにはしない（選ぶと強調が隣のノードに移り、答えの経路が見えなくなるため）
+  const select = (id: string | null) => {
+    const node = id && answer?.nodes.has(id) ? view?.nodes.find((item) => item.id === id) : null;
+    if (!selected && node?.kind === "page" && isOpenableUrl(node.url)) {
+      window.open(node.url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    setSelectedId(id);
+  };
 
   const reset = async () => {
     setResetOpen(false);
@@ -164,7 +179,8 @@ export function SidePanel() {
                 selected={selected?.id ?? null}
                 focus={focus}
                 highlight={highlight}
-                onSelect={setSelectedId}
+                litLinks={selected ? null : (answer?.links ?? null)}
+                onSelect={select}
               />
             ) : (
               <p className={styles.graphEmpty}>No pages yet.</p>
@@ -198,13 +214,26 @@ export function SidePanel() {
             the bundled sample pages.
           </p>
         )}
+        <AnswerView state={question.state} onClear={question.clear} />
         {view && selected ? (
           <NodeDetail view={view} node={selected} onSelect={setSelectedId} />
         ) : (
           view &&
-          view.nodes.length > 0 && <p className={styles.muted}>Click a node to see its details.</p>
+          view.nodes.length > 0 &&
+          question.state.kind === "idle" && (
+            <p className={styles.muted}>Click a node to see its details.</p>
+          )
         )}
       </section>
+
+      <AskForm
+        model={model}
+        busy={question.state.kind === "asking"}
+        onAsk={(text) => {
+          setSelectedId(null);
+          question.ask(text);
+        }}
+      />
 
       <AgentDialog handoff={handoff} canExport={exportable} />
       <ResetDialog open={resetOpen} onClose={() => setResetOpen(false)} onConfirm={reset} />

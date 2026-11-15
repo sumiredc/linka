@@ -144,6 +144,7 @@ export function GraphCanvas({
   selected,
   focus,
   highlight,
+  litLinks = null,
   onSelect,
 }: {
   view: GraphView;
@@ -152,6 +153,8 @@ export function GraphCanvas({
   focus: ReadonlySet<string> | null;
   /** 最後の記憶で新しくつながった組（UC2）。null なら強調しない */
   highlight: Highlight | null;
+  /** 選んだノードの線のほかに強調する線（質問の答えの経路） */
+  litLinks?: ReadonlySet<string> | null;
   onSelect(id: string | null): void;
 }) {
   const graph = useRef<ForceGraphMethods<Node, Link> | undefined>(undefined);
@@ -170,7 +173,8 @@ export function GraphCanvas({
   }, [mounted]);
 
   const isLit = (link: Link) =>
-    selected !== null && (endId(link.source) === selected || endId(link.target) === selected);
+    (selected !== null && (endId(link.source) === selected || endId(link.target) === selected)) ||
+    (litLinks?.has(link.id) ?? false);
 
   return (
     <div ref={ref} className={styles.graphCanvas}>
