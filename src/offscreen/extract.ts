@@ -7,6 +7,7 @@ import {
   type LanguageModelSession,
   type LanguageModelStatic,
 } from "../shared/prompt-api";
+import { promptWithTimeout } from "./prompt-timeout";
 
 export const EXTRACTION_INSTRUCTIONS = [
   "You extract structured notes from a part of a web page about software development.",
@@ -70,33 +71,6 @@ function errorText(error: unknown): string {
   return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 }
 
-/** 打ち切りの時間を過ぎたら、`no answer within N s` の文で失敗させる。判定（UC2）でも使う */
-export async function promptWithTimeout(
-  session: LanguageModelSession,
-  input: string,
-  timeoutMs: number,
-  responseConstraint: unknown = RESPONSE_CONSTRAINT,
-): Promise<string> {
-  const controller = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      const error = new Error(`no answer within ${timeoutMs / 1000} s`);
-      // Chrome の prompt は abort の中で同期的に AbortError で reject するので、先に reject して race に勝たせる
-      reject(error);
-      controller.abort(error);
-    }, timeoutMs);
-  });
-  try {
-    return await Promise.race([
-      session.prompt(input, { responseConstraint, signal: controller.signal }),
-      timeout,
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 export interface ExtractOptions {
   timeoutMs?: number;
   /** 分割した本文の `part` 番目（1 から）を抽出し始めるときに呼ぶ */
@@ -120,7 +94,10 @@ export async function extractChunk(
     let session: LanguageModelSession | null = null;
     try {
       session = await base.clone();
-      raw = await promptWithTimeout(session, input, timeoutMs);
+      raw = await promptWithTimeout(session, input, {
+        responseConstraint: RESPONSE_CONSTRAINT,
+        timeoutMs,
+      });
     } catch (error) {
       return failed("prompt", errorText(error));
     } finally {

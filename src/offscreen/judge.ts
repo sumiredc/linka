@@ -6,7 +6,7 @@ import {
   type LanguageModelSession,
   type LanguageModelStatic,
 } from "../shared/prompt-api";
-import { promptWithTimeout } from "./extract";
+import { promptWithTimeout } from "./prompt-timeout";
 
 export const JUDGE_INSTRUCTIONS = [
   "You decide whether a solution taken from one web page about software development addresses a concern taken from another page.",
@@ -79,7 +79,10 @@ async function judgePair(
     let session: LanguageModelSession | null = null;
     try {
       session = await base.clone();
-      raw = await promptWithTimeout(session, input, timeoutMs, RESPONSE_CONSTRAINT);
+      raw = await promptWithTimeout(session, input, {
+        responseConstraint: RESPONSE_CONSTRAINT,
+        timeoutMs,
+      });
     } catch (error) {
       return { ok: false, error: { kind: "prompt", message: errorText(error) } };
     } finally {
