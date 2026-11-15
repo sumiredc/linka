@@ -11,6 +11,7 @@ import {
   type RuntimeMessage,
 } from "../shared/messages";
 import { languageModel } from "../shared/prompt-api";
+import { GraphQuestions } from "./answer-question";
 import { ClipPipeline } from "./clip-pipeline";
 import { storedUndoJournal } from "./clip-undo";
 import { DbClient } from "./db-client";
@@ -73,6 +74,16 @@ const clips = new ClipPipeline({
   },
 });
 
+const questions = new GraphQuestions({
+  api: languageModel,
+  execute: (statement) =>
+    client.request({
+      kind: "execute",
+      query: statement.query,
+      params: statement.params as CypherParams,
+    }),
+});
+
 function handleClip(request: ClipRequest): Promise<DbResponse> {
   switch (request.kind) {
     case "clip":
@@ -109,6 +120,8 @@ function handle(message: Extract<RuntimeMessage, { target: "offscreen" }>): Prom
       return handleClip(message.request);
     case "db":
       return handleDb(message.request);
+    case "ask":
+      return questions.ask(message.request.question);
   }
 }
 
