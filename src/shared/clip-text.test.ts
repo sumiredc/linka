@@ -38,7 +38,7 @@ describe("clip text", () => {
 
   it("counts the new connections", () => {
     expect(connectionsText({ ...summary, connections: { kind: "judged", links: [link] } })).toBe(
-      "New connections: 1",
+      "Suggested connections: 1. The AI can be wrong, so check them before relying on them.",
     );
   });
 
@@ -63,10 +63,10 @@ describe("clip text", () => {
 
   it("names the other page of a new connection", () => {
     expect(connectionText(link, "https://example.com/a")).toBe(
-      "“Use a worker.” addresses “The main thread blocks.” (Page B)",
+      "“Use a worker.” may address “The main thread blocks.” (Page B)",
     );
     expect(connectionText(link, "https://example.com/b")).toBe(
-      "“Use a worker.” addresses “The main thread blocks.” (A)",
+      "“Use a worker.” may address “The main thread blocks.” (A)",
     );
   });
 

@@ -34,13 +34,13 @@ export function connectionsText(summary: ClipSummary): string {
   }
   return connections.links.length === 0
     ? "No connections found to other pages."
-    : `New connections: ${connections.links.length}`;
+    : `Suggested connections: ${connections.links.length}. The AI can be wrong, so check them before relying on them.`;
 }
 
-/** 新しいつながり 1 組の文。相手のページの名前を添える */
+/** 新しいつながり 1 組の文。相手のページの名前を添える。判定は誤りうるので「may address」と書く（PRD UC2） */
 export function connectionText(link: NewConnection, clippedUrl: string): string {
   const other = link.solution.pageUrl === clippedUrl ? link.concern : link.solution;
-  return `“${link.solution.statement}” addresses “${link.concern.statement}” (${other.pageTitle})`;
+  return `“${link.solution.statement}” may address “${link.concern.statement}” (${other.pageTitle})`;
 }
 
 /** Gemini Nano が使えないときの説明。`reason` は使えない理由 */

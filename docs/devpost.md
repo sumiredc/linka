@@ -10,7 +10,7 @@ Clip what you read in Chrome into a local knowledge graph — then hand that con
 
 Linka is a Chrome extension for developers who research before they build. Click the Linka icon on an article, doc or issue, and Gemini Nano, running on your device, extracts the page's summary, concepts, authors and claims: concerns, solutions, benefits and facts. Linka writes them into a Relate graph that lives inside the browser (Relate Wasm persisted to OPFS).
 
-Pages connect through shared concepts. More importantly, when a page you clip proposes a solution to a concern raised on another page, Linka asks Gemini Nano whether it really addresses it and, if so, links the two claims with `ADDRESSES`. The popup and the side panel show these new connections as you clip.
+Pages connect through shared concepts. More importantly, when a page you clip proposes a solution to a concern raised on another page, Linka asks Gemini Nano whether it really addresses it and, if so, links the two claims with `ADDRESSES`. The popup and the side panel show these as suggested connections as you clip. A small on-device model can be wrong: in our labeled set of 21 pairs it agreed on 13, so Linka says a solution *may* address a concern and asks you to check it.
 
 In the side panel you can browse the graph, ask it questions in plain English ("Which solutions address concerns about offline support?"), and see the Cypher that answered and the path highlighted in the graph. When you are ready to build, export the graph, turn it into a single-file Relate store with the Relate CLI, and register `relate serve --read-only --mcp stdio` with Claude Code or Codex. Your agent then plans with the concerns and solutions you researched.
 

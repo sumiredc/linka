@@ -57,7 +57,7 @@ function ClipStatus({ event }: { event: ClipEvent }) {
         {connectionsText(summary)}
       </p>
       {links.length > 0 && (
-        <ul className={styles.clipConnections} aria-label="New connections">
+        <ul className={styles.clipConnections} aria-label="Suggested connections">
           {links.map((link) => (
             <li key={`${link.solution.id}|${link.concern.id}`}>
               {connectionText(link, summary.url)}
