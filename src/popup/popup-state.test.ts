@@ -242,6 +242,25 @@ describe("popupReducer: clipping", () => {
     expect(at(state)).toEqual({ kind: "clipping", stage: { kind: "preparing" } });
   });
 
+  it("ignores a second Clip again", () => {
+    const once = run(checked({ clipped: { url: PAGE_URL, clippedAt: null } }), {
+      type: "clipAgain",
+    });
+    expect(popupReducer(once, { type: "clipAgain" })).toBe(once);
+  });
+
+  it("ignores a late progress event after the clip is done", () => {
+    const done = run(checked(), {
+      type: "event",
+      event: { kind: "finished", target: thisPage, result: succeeded },
+    });
+    const late = popupReducer(done, {
+      type: "event",
+      event: { kind: "progress", progress: { target: thisPage, stage: { kind: "writing" } } },
+    });
+    expect(at(late)).toEqual({ kind: "done", summary });
+  });
+
   it("starts again on an already clipped page when asked", () => {
     const state = run(checked({ clipped: { url: PAGE_URL, clippedAt: null } }), {
       type: "clipAgain",
@@ -274,6 +293,14 @@ describe("popupReducer: another clip in progress", () => {
 
   it("checks this page again when asked after the other clip", () => {
     expect(at(run(busy, { type: "checkAgain" }))).toEqual({ kind: "checking" });
+  });
+
+  it("does not check again outside the busy view", () => {
+    const done = run(checked(), {
+      type: "event",
+      event: { kind: "finished", target: thisPage, result: succeeded },
+    });
+    expect(popupReducer(done, { type: "checkAgain" })).toBe(done);
   });
 
   it("does not take the other page's result as this page's", () => {
