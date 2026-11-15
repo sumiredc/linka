@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   JUDGE_INSTRUCTION_VARIANTS,
+  JUDGE_RESPONSE_CONSTRAINTS,
   type JudgeInstructionVariant,
   PRODUCTION_JUDGE_VARIANT,
 } from "../offscreen/judge";
@@ -9,7 +10,7 @@ import { formatReport, runJudge, type VariantReport } from "./judge-accuracy";
 import { JUDGE_PAIRS } from "./judge-pairs";
 import { environmentText, errorText } from "./language-model";
 
-// 開発用。UC2 の判定を、正解を付けたデモデータの組に、今の指示と厳しくした指示の両方でかける（#47）。
+// 開発用。UC2 の判定を、正解を付けたデモデータの組に、指示の版ごとにかける（#47）。
 // 判定は本番と同じ openJudgeSession・judgePair を通す
 
 const VARIANTS = Object.keys(JUDGE_INSTRUCTION_VARIANTS) as JudgeInstructionVariant[];
@@ -30,6 +31,7 @@ export function JudgeAccuracyCheck() {
           JUDGE_INSTRUCTION_VARIANTS[variant],
           JUDGE_PAIRS,
           {
+            responseConstraint: JUDGE_RESPONSE_CONSTRAINTS[variant],
             onPair: (pair, pairs) => setStatus(`${variant}：${pair}/${pairs} 組目を判定しています`),
           },
         );
