@@ -7,7 +7,7 @@ import {
 import { languageModel } from "../shared/prompt-api";
 import { formatReport, runJudge, type VariantReport } from "./judge-accuracy";
 import { JUDGE_PAIRS } from "./judge-pairs";
-import { environmentText } from "./language-model";
+import { environmentText, errorText } from "./language-model";
 
 // 開発用。UC2 の判定を、正解を付けたデモデータの組に、今の指示と厳しくした指示の両方でかける（#47）。
 // 判定は本番と同じ openJudgeSession・judgePair を通す
@@ -44,6 +44,8 @@ export function JudgeAccuracyCheck() {
         }),
       );
       setStatus("終わりました");
+    } catch (error) {
+      setStatus(`止まりました: ${errorText(error)}`);
     } finally {
       setRunning(false);
     }
