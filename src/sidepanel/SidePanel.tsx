@@ -1,3 +1,9 @@
+import { TemporaryActiveTabCheck } from "./TemporaryActiveTabCheck";
+
 export function SidePanel() {
-  return <main />;
+  return (
+    <main>
+      <TemporaryActiveTabCheck />
+    </main>
+  );
 }
