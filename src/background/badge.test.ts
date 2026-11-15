@@ -1,12 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
-import type { ClippedPage } from "../shared/clip-status";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ClippedPage, ClipTarget } from "../shared/clip-status";
 import { type DbResponse, failure } from "../shared/messages";
 import {
   type Badge,
   badgeOf,
+  badgeTriggerOf,
   CLIPPED_BADGE,
   canBeClipped,
   createBadgeRefresher,
+  debounce,
   NO_BADGE,
   refreshesOnUpdate,
   tabsShowing,
@@ -162,5 +164,70 @@ describe("createBadgeRefresher", () => {
       [2, NO_BADGE],
       [1, CLIPPED_BADGE],
     ]);
+  });
+});
+
+describe("badgeTriggerOf", () => {
+  const target: ClipTarget = {
+    url: "https://example.com/a",
+    tabUrl: "https://example.com/a",
+    title: "A",
+  };
+
+  it("refreshes the tabs of a page whose clip finished", () => {
+    expect(
+      badgeTriggerOf({
+        target: "ui",
+        type: "clip",
+        event: {
+          kind: "finished",
+          target,
+          result: { ok: false, error: { kind: "noText", message: "" } },
+        },
+      }),
+    ).toEqual({ kind: "page", url: "https://example.com/a" });
+  });
+
+  it("refreshes every tab when the graph changed, such as after Reset to demo data", () => {
+    expect(
+      badgeTriggerOf({ target: "ui", type: "notify", notification: { type: "graphChanged" } }),
+    ).toEqual({ kind: "all" });
+  });
+
+  it("ignores progress, other notifications, and messages for other targets", () => {
+    expect(
+      badgeTriggerOf({
+        target: "ui",
+        type: "clip",
+        event: { kind: "progress", progress: { target, stage: { kind: "writing" } } },
+      }),
+    ).toBeNull();
+    expect(
+      badgeTriggerOf({
+        target: "ui",
+        type: "notify",
+        notification: { type: "storageChanged", storage: { kind: "opfs" } },
+      }),
+    ).toBeNull();
+    expect(badgeTriggerOf({ target: "background", type: "ensureOffscreen" })).toBeNull();
+  });
+});
+
+describe("debounce", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("runs once after the last of several calls", () => {
+    vi.useFakeTimers();
+    const run = vi.fn();
+    const debounced = debounce(run, 500);
+    debounced();
+    vi.advanceTimersByTime(400);
+    debounced();
+    vi.advanceTimersByTime(400);
+    expect(run).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(100);
+    expect(run).toHaveBeenCalledTimes(1);
   });
 });

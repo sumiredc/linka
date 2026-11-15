@@ -1,7 +1,7 @@
 // ツールバーのアイコンに付ける、記憶済みのページの印（PRD UC1）。どのタブにどの印を付けるかを決める
 import { unreadableUrlReason } from "../content/unreadable-url";
 import { type ClippedPage, pageUrlOf } from "../shared/clip-status";
-import type { DbResponse } from "../shared/messages";
+import { type DbResponse, isMessageFor } from "../shared/messages";
 import { samplePageOf } from "../shared/sample-page";
 
 export type Badge = { text: string; color: string };
@@ -28,6 +28,36 @@ export function canBeClipped(tabUrl: string, extensionRoot: string): boolean {
  */
 export function refreshesOnUpdate(changeInfo: { url?: string; status?: string }): boolean {
   return changeInfo.url !== undefined || changeInfo.status === "complete";
+}
+
+export type BadgeTrigger =
+  /** 記憶が終わった。そのページを表示しているタブだけ付け直す */
+  | { kind: "page"; url: string }
+  /** グラフが変わった（Reset to demo data など）。どのページの印が変わったか分からないので全タブ */
+  | { kind: "all" };
+
+/** offscreen document から拡張機能のすべてのページへの通知のうち、印を付け直すきっかけになるもの */
+export function badgeTriggerOf(message: unknown): BadgeTrigger | null {
+  if (!isMessageFor(message, "ui")) return null;
+  if (message.type === "clip" && message.event.kind === "finished") {
+    return { kind: "page", url: message.event.target.url };
+  }
+  if (message.type === "notify" && message.notification.type === "graphChanged") {
+    return { kind: "all" };
+  }
+  return null;
+}
+
+/**
+ * 最後に呼ばれてから `ms` 待って 1 回だけ `run` する関数を返す。
+ * graphChanged は記憶の書き込みの文ごとに届くので、まとめてから全タブを付け直す
+ */
+export function debounce(run: () => void, ms: number): () => void {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return () => {
+    clearTimeout(timer);
+    timer = setTimeout(run, ms);
+  };
 }
 
 /** isClipped の返事を印にする。返事が失敗なら null（今の印を変えない） */
