@@ -5,6 +5,9 @@ import { normalizePersonName } from "./person-name";
 
 type Claim = Extraction["claims"][number];
 
+/** どの分割でも `concepts` に挙げられず、Claim や関係からだけ参照された Concept の分類 */
+export const UNLISTED_CATEGORY = "other";
+
 /** 各リストの 1 件目を順に、次に 2 件目を順に…と並べる。上限で切るときに、前の分割だけが残らないようにする */
 function interleave<T>(lists: readonly (readonly T[])[]): T[] {
   const longest = Math.max(0, ...lists.map((list) => list.length));
@@ -23,9 +26,11 @@ function interleave<T>(lists: readonly (readonly T[])[]): T[] {
  *
  * - Concept は {@link normalizeConceptKey} の key で 1 つにし、最初に出た名前と分類を使う。
  *   Claim と関係から参照する名前も、その名前に揃える。key が空になる名前は捨てる
- * - 上限を超える Concept は、Claim と関係からの参照が少ないものから捨てる。
- *   `concepts` に残らなかった Concept（分類の無いものを含む）への参照と、その端を失った関係も捨てる
- *   （グラフに分類の無い Concept を作らないため）
+ * - Claim と関係が参照するだけで、どの分割の `concepts` にも無い Concept は、分類を
+ *   {@link UNLISTED_CATEGORY} にして加える（挙げられた Concept の名前と分類が優先する）
+ * - 上限を超える Concept は、Claim と関係からの参照が少ないものから捨てる。同数なら、挙げられたものを
+ *   interleave の順に、次に参照だけのものを最初に参照された順に残す。
+ *   捨てた Concept への参照と、その端を失った関係も捨てる（グラフに分類の無い Concept を作らないため）
  * - Person は {@link normalizePersonName} で揃えて重複を除き、揃えてスキーマの長さを超えた名前は捨てる
  * - Claim は空白を揃えた文が同じなら 1 つにし（Claim の id と同じ判定）、参照する Concept を合わせる。種類は最初のものを使う
  * - 関係は向きを区別せずに重複を除き、同じ Concept 同士の関係は捨てる
@@ -75,7 +80,11 @@ export function mergeExtractions(extractions: readonly Extraction[]): Extraction
 
   const keptClaims = [...claims.values()].slice(0, EXTRACTION_LIMITS.claims);
   const references = new Map<string, number>();
-  const count = (key: string) => references.set(key, (references.get(key) ?? 0) + 1);
+  const count = (key: string) => {
+    references.set(key, (references.get(key) ?? 0) + 1);
+    // Nano は concepts に挙げずに Claim や関係で概念を名指しすることが多い。捨てると UC2 のつながりが減る
+    if (!concepts.has(key)) concepts.set(key, UNLISTED_CATEGORY);
+  };
   for (const { conceptKeys } of keptClaims) for (const key of conceptKeys) count(key);
   for (const [from, to] of related.values()) {
     count(from);
