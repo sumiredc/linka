@@ -37,7 +37,7 @@ flowchart LR
   C -->|RELATED_TO| C2["Concept"]
 ```
 
-Extraction results are written with parameterized `MERGE` statements built by the code, never by the model. Questions work the same way: Gemini Nano only picks one of nine question types and a concept from your graph; the Cypher for each type is fixed in the code, and the side panel shows the Cypher it ran.
+Extraction results are written with parameterized `MERGE` statements built by the code, never by the model. Questions work the same way: Gemini Nano only picks one of nine query kinds and its target, if the kind needs one (one or two concepts, a page from your graph, or a number); the Cypher for each kind is fixed in the code, and the side panel shows the Cypher it ran.
 
 ## Setup and run
 
@@ -59,18 +59,18 @@ npm run build
 
 1. Open `chrome://extensions` and turn on **Developer mode**.
 2. Click **Load unpacked** and choose the `dist/` folder.
-3. Chrome warns that Linka can "Read your browsing history". This comes from the `tabs` permission, which Linka needs to read the URL of the active tab to mark already-clipped pages on its icon. Linka does not collect history.
+3. Loading unpacked shows no permission prompt. The extension's **Details** page lists its permissions, including "Read your browsing history", which comes from the `tabs` permission. Linka needs it to read the URL of a tab when you switch tabs or a tab navigates, so it can put the ✓ badge on its icon for pages you have already clipped. Linka does not collect history.
 4. Pin Linka to the toolbar (puzzle-piece icon → pin).
 
 ### First run
 
-Click the Linka icon, then **Open side panel** (or open Chrome's side panel and choose Linka). On first run the side panel shows a demo graph of 15 pages from a technical research on local-first, offline web storage (15 pages, 29 concepts, 9 people, 48 claims, 11 cross-page `ADDRESSES` links). The header shows the AI status: `AI ready`, `Downloading AI`, or not available with the reason.
+Open Chrome's side panel (the side panel button in the toolbar) and choose **Linka**. Clicking the Linka icon itself clips the current page (see [Use](#use)); its popup offers **Open side panel** after a clip. On first run the side panel shows a demo graph from technical research on local-first, offline web storage: 15 pages, 29 concepts, 9 people, 48 claims and 11 cross-page `ADDRESSES` links. The header shows the AI status: `AI ready`, `Downloading AI`, or not available with the reason.
 
 The next time you open it, the side panel shows your graph as you left it; the demo data is not loaded again. **… → Reset to demo data** brings the demo graph back (after a confirmation).
 
 ### Without Gemini Nano
 
-Gemini Nano runs only where Chrome supports it. Per [Chrome's Prompt API docs](https://developer.chrome.com/docs/ai/prompt-api), it needs a desktop OS (Windows 10/11, macOS 13+, Linux, or ChromeOS on a Chromebook Plus; not Android or iOS), at least 22 GB of free disk space, and either a GPU with more than 4 GB of VRAM or 16 GB of RAM. It may also be disabled by an enterprise policy (not verified). The model is downloaded the first time you clip a page; the popup and the side panel show the progress.
+Gemini Nano runs only where Chrome supports it. Per [Chrome's Prompt API docs](https://developer.chrome.com/docs/ai/prompt-api), it needs a desktop OS (Windows 10/11, macOS 13+, Linux, or ChromeOS on a Chromebook Plus; not Android or iOS), at least 22 GB of free disk space, and either a GPU with more than 4 GB of VRAM or a CPU with 16 GB of RAM and 4 or more cores. It may also be disabled by an enterprise policy (not verified). If the model is not on the device yet, its download starts when you open the Linka popup; the popup and the side panel show the progress.
 
 | Feature | Without Gemini Nano |
 |---|---|
@@ -91,14 +91,14 @@ Each sample's solutions connect to concerns already in the demo graph, so the po
 ### Use
 
 1. **Clip a page.** Open an article and click the Linka icon. Clipping starts right away: read the page → extract concepts and claims → save to the graph → find connections to other pages. You can close the popup; clipping continues. When it finishes, the popup lists the counts and the new connections, and the icon shows that the page is clipped. Clicking the icon on a clipped page offers **Clip again** (replaces what was extracted from that page) and **Open side panel**. Extraction asks Gemini Nano for English input and output, so English pages work best.
-2. **Browse the graph.** In the side panel, click a node to see its details. Click a page in the results to open it in a new tab.
+2. **Browse the graph.** In the side panel, click a node to see its details.
 3. **Ask a question** (needs Gemini Nano). Type an English question and press ⌘/Ctrl + Enter. For example:
    - What concerns are there about OPFS?
    - Which solutions address concerns about offline support?
    - Which pages mention both OPFS and Web Worker?
    - Which pages propose solutions to the concerns raised on the local-first software page?
 
-   The side panel shows the executed Cypher and the results, and highlights them in the graph. If a question does not fit a supported type, it lists the types and the concepts in your graph instead.
+   The side panel shows the executed Cypher and the results, and highlights them in the graph. Click a page in the results to open it in a new tab. If a question does not fit a supported type, it lists the types and the concepts in your graph instead.
 4. **Hand it to your agent.** See [Use with your coding agent](#use-with-your-coding-agent).
 
 ## Use with your coding agent
@@ -117,11 +117,10 @@ The side panel's **… → Use with your agent** shows these steps with copy but
      DO_NOT_TRACK=1 relate query -d "$HOME/linka/linka.rl" < "$export_file" > /dev/null
    ```
 
-   On macOS, if this fails with `Operation not permitted`, your terminal app is not allowed to read `~/Downloads`. Either allow it in System Settings → Privacy & Security → Files and Folders (Downloads Folder) or Full Disk Access, or move the file out of Downloads and load it from there:
+   On macOS, if this fails with `Operation not permitted`, your terminal app is not allowed to read `~/Downloads`. Either allow it in System Settings → Privacy & Security → Files and Folders (Downloads Folder) or Full Disk Access, or move `linka-export.cypher` from Downloads into a `linka` folder in your home folder **in Finder** (moving it from the terminal fails for the same reason) and load it from there:
 
    ```sh
-   mkdir -p "$HOME/linka" && mv "$HOME/Downloads/linka-export.cypher" "$HOME/linka/" &&
-     rm -f "$HOME/linka/linka.rl" &&
+   rm -f "$HOME/linka/linka.rl" &&
      DO_NOT_TRACK=1 relate query -d "$HOME/linka/linka.rl" < "$HOME/linka/linka-export.cypher" > /dev/null
    ```
 
@@ -232,25 +231,15 @@ npm run build       # dist/
 npm run dev         # rebuild dist/ on change; reload the extension on chrome://extensions
 ```
 
-| Path | What runs there |
-|---|---|
-| `src/background/` | Service worker. Creates the single offscreen document and updates the icon's clipped mark |
-| `src/offscreen/` | Offscreen document: owns the Relate database (in `relate.worker.ts`) and calls Gemini Nano (extraction, `ADDRESSES` judging, question typing) |
-| `src/popup/` | Toolbar popup that starts a clip |
-| `src/sidepanel/` | Side panel: graph, questions, export, agent hand-off |
-| `src/content/` | Script injected into the page to read its main text (Readability) |
-| `src/shared/` | Message types, schemas, Cypher builders |
-| `src/dev/` | Developer page (`dev.html`) |
-| `seed/`, `data/` | Demo data and the bundled store |
-| `spikes/`, `mock/` | Feasibility checks and the UI mock, kept for reference (not part of the build) |
+The source is under `src/`, one folder per place it runs: `background/` (service worker), `offscreen/` (the Relate database and Gemini Nano), `popup/`, `sidepanel/`, `content/` (reads the page) and `shared/`. `spikes/` and `mock/` are feasibility checks and the UI mock, kept for reference and not part of the build.
 
 ### Manual checks on `dev.html`
 
-`dev.html` is not linked from the UI. Open `chrome-extension://<extension-id>/dev.html` in a tab. It has a Cypher console that sends statements to the extension's real database through the offscreen document (so writes there change your graph), an extraction check, and Gemini Nano checks (`responseConstraint` keywords, context size, concept-name notes). Its labels are in Japanese.
+Open `chrome-extension://<extension-id>/dev.html` in a tab (it is not linked from the UI; labels are in Japanese). It has a Cypher console on the extension's real database (writes there change your graph), an extraction check and Gemini Nano checks.
 
 ### Offscreen document logs
 
-Timings of each extraction part, each `ADDRESSES` judgment and each question are logged in the offscreen document's console. To see them, open `chrome://extensions` → Linka → **Inspect views: offscreen.html**.
+Timings of extraction, `ADDRESSES` judging and questions are logged in the offscreen document's console: open `chrome://extensions` → Linka → **Inspect views: offscreen.html**.
 
 **Do not open `offscreen.html` in a tab.** That page starts its own database worker, becoming a second owner of the OPFS store, which only one place can open at a time.
 
@@ -299,7 +288,7 @@ Licenses are taken from each package's `package.json`; transitive dependencies a
 
 ### New work and reused code
 
-The project was started after 2026-11-11; the first commit is dated 2026-11-15. The two feasibility checks in `spikes/` were written in this repository before the extension itself, and the production code reuses parts of them:
+The project was started on or after 2026-11-11; the first commit is dated 2026-11-15. The two feasibility checks in `spikes/` were written in this repository before the extension itself, and the production code reuses parts of them:
 
 | From | To | What |
 |---|---|---|
