@@ -52,7 +52,7 @@ describe("the side panel graph query on the demo data", () => {
       MENTIONS: 64,
       ASSERTS: 48,
       ABOUT: 90,
-      ADDRESSES: 11,
+      ADDRESSES: 10,
       RELATED_TO: 25,
     });
   });

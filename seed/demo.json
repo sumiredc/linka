@@ -880,16 +880,6 @@
     },
     {
       "solution": {
-        "page": "https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers",
-        "statement": "A Web Worker runs a script in a background thread, so it can perform heavy tasks without interfering with the user interface."
-      },
-      "concern": {
-        "page": "https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system",
-        "statement": "The synchronous OPFS file calls, such as those on a sync access handle, can run only inside web workers, not on the main thread."
-      }
-    },
-    {
-      "solution": {
         "page": "https://developer.chrome.com/blog/sqlite-wasm-in-the-browser-backed-by-the-origin-private-file-system",
         "statement": "The library sets up the worker needed for synchronous OPFS access itself, so it can be used right from the main thread."
       },
