@@ -181,15 +181,16 @@ flowchart LR
 - 事前条件：グラフに 1 ページ以上ある。利用者の端末に Relate CLI がある
 - 主フロー：
   - 利用者が「Export」を押すと、グラフ全体を再現する Cypher ファイル（`linka-export.cypher`）がダウンロードされる
-  - 利用者が `relate -d linka.rl < linka-export.cypher` で単一ファイルのストアにする
-  - 利用者が Relate の MCP サーバー（`relate serve --database linka.rl --mcp stdio`）をコーディングエージェントに登録する。手順は Claude Code（`claude mcp add`）と Codex（`~/.codex/config.toml` の `[mcp_servers.linka]`）の両方をタブで切り替えて示す
+  - 利用者が `relate query -d linka.rl < linka-export.cypher` で単一ファイルのストアにする（`query` を省いた `relate -d linka.rl < …` は文を実行せず、ヘルプを出して 0 で終わる）
+  - 利用者が Relate の MCP サーバー（`relate serve --database linka.rl --read-only --mcp stdio`）をコーディングエージェントに登録する。手順は Claude Code（`claude mcp add`）と Codex（`~/.codex/config.toml` の `[mcp_servers.linka]`）の両方をタブで切り替えて示す。`--read-only` を付けると、エージェントに見えるツールは `read_cypher` と `get_schema` だけになり、ファイルも書き換わらない（付けないと `write_cypher` も出て、エージェントがグラフを書き換えられる）。`linka.rl` は絶対パスで書き、`DO_NOT_TRACK=1` を環境変数に入れる
   - エージェントに「調べた課題と解決策を踏まえて実装方針を出して」と頼むと、エージェントがグラフを問い合わせて答える
 - 代替フロー：
   - 渡し方の説明は、書き出した直後だけでなく、サイドパネルのメニューからいつでも開ける。そこからも書き出せる
-  - MCP を使わず、`relate` CLI で直接 Cypher を実行して中身を確かめられる
+  - MCP を使わず、`relate query --read-only -d linka.rl "<Cypher>"` で直接 Cypher を実行して中身を確かめられる（`--read-only` を付けないと、読むだけでもファイルが書き換わる）
 - 例外フロー：
   - グラフが空：Export を押せないようにする
-  - 書き出したファイルの読み込みで失敗する：README に手順と、確認済みの Relate のバージョンを書いておく
+  - 書き出したファイルの読み込みで失敗する：CLI は 0 以外（文法・型のエラーは 6）で終わり、何番目の文で失敗したかを出す。それより前の文は確定して残るので、`linka.rl` を消してから作り直す。README に手順と、確認済みの Relate のバージョンを書いておく
+  - 書き出し直した：前の `linka.rl` に読み込むと、消したページが残るので、`linka.rl` を消してから作る
 - 事後条件：
   - `linka.rl` を CLI で問い合わせると、サイドパネルと同じ件数の Page・Concept・Claim・関係が返る
   - 書き出しによってサイドパネル側のグラフは変わっていない
@@ -273,7 +274,7 @@ flowchart LR
 | E2E テスト | Playwright | 1.65.1 | 拡張機能を Chromium に読み込んで自動で確かめる方法が、検証で使えた。CI にはコストが重いので当面入れず、単体テストを重視する | 検証 1・2 |
 | lint と整形 | Biome | 2.6.7 | 1 つの道具で lint と整形をまかなえる | 動作 |
 | 実行環境 | Node.js / npm | 26.13.1（現行の LTS）/ 12.2.2 | 開発者ごとの版のずれを防ぐため、`package.json` の `volta` と `engines` で固定する | 型検査・単体テスト・ビルド・lint・E2E |
-| `.rl` の作成と MCP | Relate CLI | 拡張機能の Wasm と同じ 1.0.x に揃える | `data/linka.rl` の作成と、UC4 の MCP 接続に使う。CLI は初期設定で利用状況を送信するので、README では `DO_NOT_TRACK=1` か `relate telemetry off` を案内する | 未確認 |
+| `.rl` の作成と MCP | Relate CLI | 1.0.1（拡張機能の Wasm と同じ版） | `data/linka.rl` の作成と、UC4 の MCP 接続に使う。公式のインストーラ（`curl -sSfL https://relatedb.ai/install.sh \| bash`）が、署名と checksum を確かめてから `~/.local/bin/relate` に入れる。sudo は要らない。インストーラは常に最新版を入れるので、版を固定したいときは GitHub の Release `v1.0.1` から `relate-darwin-arm64` などを直接取る。CLI は初期設定で利用状況を送信するので、README では `DO_NOT_TRACK=1` か `relate telemetry off` を案内する | macOS（arm64）で `npm run store`、`relate serve --mcp stdio`、Claude Code と Codex からの問い合わせ |
 | ライセンス | MIT | — | ハッカソンの推奨 | — |
 
 リポジトリの構成は 1 つのパッケージとし、`src/` の下を動く場所ごとに分ける：`background/`（service worker）、`offscreen/`（DB と AI）、`popup/`、`sidepanel/`、`content/`（ページの読み取り）、`shared/`（メッセージの型とスキーマ）。デモデータは `seed/`、同梱するストアは `data/` に置く。`mock/` と `spikes/` は参考として残す。
@@ -287,7 +288,7 @@ flowchart LR
 | 公開リポジトリと topic `relate`（Rules §3・§4、Overview） | topic は設定済み。`relate-neo4j-hackathon` も付ける。リポジトリは self-hosted runner を消すまで private のままにし、提出の直前に公開する（#4） | topic は設定済み、公開は未 |
 | プロジェクトの説明：何をするか・なぜ役立つか・何と何をつなぐか（Rules §4、Overview） | Devpost に英語で書く（§1 から） | 未着手 |
 | README（setup / use、指定テンプレート）（Overview） | Use case / How it uses Relate（Mode：拡張機能内は OPFS、同梱は single file。理由：Wasm で永続化できるのは OPFS だけで、審査員が点検できるよう同じ内容を `.rl` でも同梱）/ Setup and run / Where the data lives | 未着手 |
-| 永続化されたストア（Overview） | `data/linka.rl`（`seed/demo.cypher` から CLI で生成） | 未着手 |
+| 永続化されたストア（Overview） | `data/linka.rl`（`seed/demo.cypher` から `npm run store` で生成し、コミットする）。同じ seed から作り直してもバイト列が一致しないので、seed を変えたときだけ作り直す。問い合わせは `--read-only` で開く（付けないと読むだけでもファイルが書き換わり、差分が出る） | 作成済み（seed を変えたら作り直す） |
 | Relate が実際に動いているコード（Overview） | 拡張機能本体 | 未着手 |
 | デモ（2 分以内、ログイン不要で見られる）（Rules §4、Overview） | YouTube 限定公開などで 1 分 30 秒〜2 分 | 未着手 |
 | 使った Relate の機能・サードパーティツール・AI ツールの申告（Rules §3・§4） | Relate（Wasm・OPFS・Cypher・CLI・MCP）、使用ライブラリ、Gemini Nano（実行時）、Claude Code と Gemini（開発時）を README と Devpost に書く | 未着手 |
@@ -367,7 +368,7 @@ W1 のスパイクで Nano の Cypher 生成の成功率が低い（10 問中 5 
 - ~~質問の書き込み拒否を、キーワード検査だけにするか、`EXPLAIN` の実行計画も見るか~~ → キーワード検査だけにする（2026-11-15 に決定）。Cypher を字句に分けてから句のキーワードを探すので、文字列・コメント・プロパティ名・ラベル・マップのキーにある同じ綴りでは拒否しない。`INSERT`（Relate 1.0.1 は GQL の `INSERT` で書き込む）とスキーマ・管理の句も拒否し、手続きの呼び出しはグラフの形を読む `db.labels` などだけを通す。閉じていない文字列やコメントは拒否する。`EXPLAIN` を使わない理由は、Relate の実行計画では `CALL { … }` の副問い合わせが `CallSubquery` の 1 つにまとまり、中の書き込みが見えないため（キーワード検査より見落とす）
 - ~~Concept の別名表の持ち方~~ → コードの中の定数（`src/shared/concept-key.ts` の `CONCEPT_ALIASES`）にする（2026-11-15 に決定）。拡張機能・seed の生成・書き出しが同じ key を作る必要があり、コードに置けば 1 か所で済み、テストで表の形（左右とも正規化済み・別名の連鎖が無い・複数形は単数形に寄せる）を確かめられる。MVP には表を編集する画面が無いので、グラフや設定に持つ理由が無い。表を変えても、すでにグラフにある key は書き換わらない（新しいクリップから効く）
 - アイコンの記憶済みの印に `tabs` 権限が要るか。サイドパネルの記憶ボタンで `activeTab` が付与されるか。モデルのダウンロードの開始に利用者の操作が要るか
-- Relate CLI が入り、`relate -d x.rl < seed` と `relate serve --mcp stdio` が動くか（版を記録する）
+- ~~Relate CLI が入り、`relate -d x.rl < seed` と `relate serve --mcp stdio` が動くか（版を記録する）~~ → 1.0.1 で動く（2026-11-15 に確認）。ストアは `relate query -d x.rl < seed/demo.cypher` で作る（`query` が要る）。`seed/demo.cypher` から、Wasm 側と同じ件数（Page 15・Concept 29・Person 9・Claim 48・`ADDRESSES` 11）の単一ファイル（約 116 KB、横に別のファイルはできない）ができる。MCP は `relate serve --database x.rl --read-only --mcp stdio` で、Claude Code と Codex から `read_cypher` で問い合わせられた。手順は §6 UC4 と §7.1
 - ~~Nano が無くても記憶できるサンプルページを、実在する記事にするか、拡張機能に同梱するページにするか~~ → 拡張機能に同梱するページにする（2026-11-15 に決定）。ネットワークや外部サイトの変更に左右されず、事前抽出データとページがずれないため。拡張機能は自身のページに `scripting.executeScript` で注入できないので、本文は読まず、タブの URL が拡張機能の `samples/` の下なら同梱の事前抽出データを使う。Page の URL は、環境ごとに変わる拡張機能の URL ではなく、リポジトリにあるそのファイルの URL にする
 
 Phase 3 で決めるもの：
