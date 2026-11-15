@@ -2,11 +2,20 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import type { AddressesCandidate } from "../shared/graph-statements";
 import type {
+  LanguageModelCreateOptions,
   LanguageModelSession,
   LanguageModelStatic,
   PromptOptions,
 } from "../shared/prompt-api";
-import { JudgementSchema, judgeCandidates, judgePrompt, parseJudgement } from "./judge";
+import {
+  JUDGE_INSTRUCTION_VARIANTS,
+  JUDGE_INSTRUCTIONS,
+  JudgementSchema,
+  judgeCandidates,
+  judgePrompt,
+  openJudgeSession,
+  parseJudgement,
+} from "./judge";
 
 type Answer = string | Error | "hang";
 
@@ -14,6 +23,7 @@ type Answer = string | Error | "hang";
 class FakeModel implements LanguageModelStatic {
   readonly prompts: { input: string; options?: PromptOptions }[] = [];
   created = 0;
+  readonly systemPrompts: unknown[] = [];
   baseDestroyed = false;
 
   constructor(
@@ -25,8 +35,9 @@ class FakeModel implements LanguageModelStatic {
     return this.state;
   }
 
-  async create(): Promise<LanguageModelSession> {
+  async create(options?: LanguageModelCreateOptions): Promise<LanguageModelSession> {
     this.created++;
+    this.systemPrompts.push(options?.initialPrompts?.[0]?.content);
     return this.session(true);
   }
 
@@ -132,6 +143,21 @@ describe("judgeCandidates", () => {
       ok: false,
       error: { kind: "unavailable" },
     });
+  });
+});
+
+describe("judge instructions", () => {
+  it("judges production pairs with the production instructions", async () => {
+    const model = new FakeModel([no]);
+    await judgeCandidates(model, [candidate(1)]);
+    expect(model.systemPrompts).toEqual([JUDGE_INSTRUCTIONS]);
+  });
+
+  it("opens a session with the instructions it is given", async () => {
+    const model = new FakeModel([]);
+    const opened = await openJudgeSession(model, JUDGE_INSTRUCTION_VARIANTS.strict);
+    expect(opened.ok).toBe(true);
+    expect(model.systemPrompts).toEqual([JUDGE_INSTRUCTION_VARIANTS.strict]);
   });
 });
 
