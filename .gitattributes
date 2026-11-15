@@ -1,0 +1,2 @@
+# 生成物の差分検査（npm run seed のあとの git diff）が改行の変換で崩れないようにする
+seed/demo.cypher text eol=lf
