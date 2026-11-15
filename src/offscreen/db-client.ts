@@ -8,8 +8,10 @@ import {
   type DbResponse,
   type DbResultOf,
   failure,
+  type RelateResult,
   type StorageState,
 } from "../shared/messages";
+import { EMPTINESS_QUERY, shouldSeed } from "./seed";
 import type { WorkerOp, WorkerRequest, WorkerResponse } from "./worker-protocol";
 
 export type WorkerPort = { post(request: WorkerRequest): void; terminate(): void };
@@ -33,6 +35,8 @@ export type DbClientOptions = {
   lockRetry?: { attempts: number; delayMs: number };
   onNotify?(notification: DbNotification): void;
   timers?: Timers;
+  /** 空の DB を開いたときに入れる Cypher スクリプト（`seed/demo.cypher`） */
+  seed?: string;
 };
 
 type DbOp = Exclude<DbRequest, { kind: "status" }>;
@@ -192,14 +196,32 @@ export class DbClient {
   private async openIn(mode: "opfs" | "memory"): Promise<OpenFailure | null> {
     if (!this.worker) this.spawn();
     const outcome = await this.call({ op: "open", mode, uri: this.options.uri });
-    if (outcome.kind === "response" && outcome.response.ok) return null;
+    if (outcome.kind === "response" && outcome.response.ok) return this.seedIfEmpty();
     const reason = describeLoss(outcome)[1];
     if (outcome.kind === "response" && !outcome.response.ok && !outcome.response.trap) {
       // 開くのに失敗しただけなので worker はそのまま使える
       return { reason, cause: /storage locked/i.test(reason) ? "locked" : "refused" };
     }
+    return this.lostWhileOpening(outcome);
+  }
+
+  /** 開いた直後、待っている依頼より先に、空の DB にだけデモデータを入れる。メモリ上の DB は開くたびに空なので毎回入る */
+  private async seedIfEmpty(): Promise<OpenFailure | null> {
+    const seed = this.options.seed;
+    if (seed === undefined) return null;
+    const check = await this.call({ op: "execute", query: EMPTINESS_QUERY, params: null });
+    if (isLost(check)) return this.lostWhileOpening(check);
+    if (!shouldSeed(classifyCheck(check))) return null;
+    const seeded = await this.call({ op: "executeScript", script: seed, params: null });
+    if (isLost(seeded)) return this.lostWhileOpening(seeded);
+    // Relate のエラーで途中までしか入らなくても DB は使えるので、開けたことにする
+    this.notify({ type: "graphChanged" });
+    return null;
+  }
+
+  private lostWhileOpening(outcome: Outcome): OpenFailure {
     this.discardWorker();
-    return { reason, cause: "lost" };
+    return { reason: describeLoss(outcome)[1], cause: "lost" };
   }
 
   private spawn(): void {
@@ -278,6 +300,24 @@ function toWorkerOp(request: DbOp): WorkerOp {
   return request.kind === "execute"
     ? { op: "execute", query: request.query, params }
     : { op: "executeScript", script: request.script, params };
+}
+
+/** 時間切れ・trap・worker が落ちた、のどれか。worker は作り直すしかない */
+function isLost(outcome: Outcome): boolean {
+  return outcome.kind !== "response" || (!outcome.response.ok && outcome.response.trap);
+}
+
+function classifyCheck(outcome: Outcome): DbResponse<RelateResult> {
+  if (outcome.kind !== "response" || !outcome.response.ok) {
+    return failure(...describeLoss(outcome));
+  }
+  const { value } = outcome.response;
+  if (typeof value !== "string") return failure("exception", "unexpected response");
+  try {
+    return classifyExecute(value);
+  } catch (error) {
+    return failure("exception", messageOf(error));
+  }
 }
 
 function describeLoss(outcome: Outcome): [DbFailureKind, string] {
