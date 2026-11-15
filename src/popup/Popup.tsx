@@ -11,8 +11,9 @@ import { unreadableUrlReason } from "../content/unreadable-url";
 import { askClip, onClipEvent } from "../shared/clip";
 import { type ClipBody, pageUrlOf } from "../shared/clip-status";
 import { connectionsText, countsText, stageText } from "../shared/clip-text";
-import { askModel, onModelStatus } from "../shared/model";
-import { downloadModel, type ModelStatus } from "../shared/model-status";
+import type { RuntimeMessage } from "../shared/messages";
+import { onModelStatus } from "../shared/model";
+import { downloadModel, type ModelStatus, readModelStatus } from "../shared/model-status";
 import { languageModel } from "../shared/prompt-api";
 import { samplePageOf } from "../shared/sample-page";
 import { LinkaMark } from "../sidepanel/LinkaMark";
@@ -24,6 +25,7 @@ import {
   popupReducer,
   progressSteps,
   readFailureText,
+  shouldDownloadInPopup,
 } from "./popup-state";
 
 type ActiveTab = { id: number; url: string; title: string };
@@ -36,8 +38,6 @@ function unreachable(message: string): PopupAction {
 
 /** 開いたときと、別の記憶が終わって押し直されたときに、このページを記憶できるかを確かめる */
 async function check(tabRef: RefObject<ActiveTab | null>, dispatch: Dispatch<PopupAction>) {
-  // ダウンロードは吹き出しを開いた処理から始める（PRD §13）。読めないページでも始めておく
-  const modelAnswer = askModel({ kind: "download" });
   if (tabRef.current === null) {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab?.id !== undefined && tab.url) {
@@ -57,33 +57,35 @@ async function check(tabRef: RefObject<ActiveTab | null>, dispatch: Dispatch<Pop
     return;
   }
 
-  const [current, clipped, model] = await Promise.all([
+  const [current, clipped] = await Promise.all([
     askClip({ kind: "current" }),
     askClip({ kind: "isClipped", tabUrl: tab.url }),
-    modelAnswer,
   ]);
   if (!current.ok) return dispatch(unreachable(current.error.message));
   if (!clipped.ok) return dispatch(unreachable(clipped.error.message));
-  const status: ModelStatus = model.ok
-    ? model.value
-    : {
-        kind: "unavailable",
-        reason: `the offscreen document did not answer: ${model.error.message}`,
-      };
   dispatch({
     type: "checked",
-    page: { url: pageUrl, sample, model: status },
+    page: { url: pageUrl, sample },
     current: current.value,
     clipped: clipped.value,
   });
+}
 
-  // offscreen document では利用者の操作の中と見なされずに始められなかった。吹き出しから直接始める
-  if (status.kind === "downloadable" && status.error !== null) {
-    const after = await downloadModel(languageModel(), (next) =>
-      dispatch({ type: "model", status: next }),
-    );
-    dispatch({ type: "model", status: after });
-  }
+/**
+ * モデルの状態を読み、入っていなければ吹き出しから直接ダウンロードする（PRD §13：吹き出しを開いた処理から）。
+ * offscreen document が持つ状態は通らないので、進み具合はサイドパネルにも直接知らせる
+ */
+async function prepareModel(dispatch: Dispatch<PopupAction>) {
+  const api = languageModel();
+  const status = await readModelStatus(api);
+  dispatch({ type: "model", status });
+  if (!shouldDownloadInPopup(status)) return;
+  const report = (next: ModelStatus) => {
+    dispatch({ type: "model", status: next });
+    const message: RuntimeMessage = { target: "ui", type: "model", status: next };
+    chrome.runtime.sendMessage(message).catch(() => {});
+  };
+  report(await downloadModel(api, report));
 }
 
 /** 本文を読み（同梱サンプルなら読まず）、offscreen document に記憶を頼む。吹き出しを閉じても記憶は続く */
@@ -264,12 +266,14 @@ function Body({
         </>
       );
     case "waitingForModel": {
-      const progress = view.model.kind === "downloading" ? view.model.progress : null;
+      const { model } = state;
+      if (model === null) return <p className={styles.muted}>Checking the on-device AI…</p>;
+      const progress = model.kind === "downloading" ? model.progress : null;
       return (
         <>
           <h1 className={styles.title}>Downloading the on-device AI</h1>
-          <p className={styles.text}>{modelText(view.model)}</p>
-          {view.model.kind === "downloading" && (
+          <p className={styles.text}>{modelText(model)}</p>
+          {model.kind === "downloading" && (
             <progress className={styles.bar} max={1} value={progress ?? undefined} />
           )}
           <p className={styles.hint}>
@@ -290,6 +294,15 @@ export function Popup() {
   useEffect(() => {
     const stopClip = onClipEvent((event) => dispatch({ type: "event", event }));
     const stopModel = onModelStatus((status) => dispatch({ type: "model", status }));
+    prepareModel(dispatch).catch((error: unknown) =>
+      dispatch({
+        type: "model",
+        status: {
+          kind: "unavailable",
+          reason: error instanceof Error ? error.message : String(error),
+        },
+      }),
+    );
     return () => {
       stopClip();
       stopModel();
