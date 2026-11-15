@@ -9,8 +9,9 @@ import {
 import { readTab } from "../content/read-tab";
 import { unreadableUrlReason } from "../content/unreadable-url";
 import { askClip, onClipEvent } from "../shared/clip";
-import { type ClipBody, pageUrlOf } from "../shared/clip-status";
-import { connectionsText, countsText, stageText } from "../shared/clip-text";
+import type { ClipBody } from "../shared/clip-status";
+import { type ClipSummary, pageUrlOf } from "../shared/clip-status";
+import { connectionsText, connectionText, countsText, stageText } from "../shared/clip-text";
 import type { RuntimeMessage } from "../shared/messages";
 import { onModelStatus } from "../shared/model";
 import { downloadModel, type ModelStatus, readModelStatus } from "../shared/model-status";
@@ -139,6 +140,28 @@ function modelText(model: ModelStatus): string {
   }
 }
 
+/** 新しいつながり（UC2）。無ければ「見つからなかった」、判定しなかったらその理由を出す */
+function Connections({ summary }: { summary: ClipSummary }) {
+  const { connections } = summary;
+  const links = connections.kind === "judged" ? connections.links : [];
+  return (
+    <>
+      <p className={connections.kind === "judged" ? styles.text : styles.hint}>
+        {connectionsText(summary)}
+      </p>
+      {links.length > 0 && (
+        <ul className={styles.connections}>
+          {links.map((link) => (
+            <li key={`${link.solution.id}|${link.concern.id}`}>
+              {connectionText(link, summary.url)}
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
 function Actions({ children }: { children: ReactNode }) {
   return <div className={styles.actions}>{children}</div>;
 }
@@ -191,14 +214,13 @@ function Body({
       );
     }
     case "done": {
-      const connections = connectionsText(view.summary);
       return (
         <>
           <h1 className={styles.title}>{view.summary.newPage ? "Clipped" : "Clipped again"}</h1>
           <p className={styles.text}>
             “{view.summary.title}”: {countsText(view.summary)}
           </p>
-          {connections && <p className={styles.text}>{connections}</p>}
+          <Connections summary={view.summary} />
           <Actions>
             <CloseButton />
             <SidePanelButton tabId={tab?.id} />

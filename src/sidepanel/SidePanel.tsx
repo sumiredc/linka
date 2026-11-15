@@ -4,12 +4,13 @@ import type { StorageState } from "../shared/messages";
 import type { ModelStatus } from "../shared/model-status";
 import { AgentDialog, useAgentHandoff } from "./AgentDialog";
 import { aiBadge } from "./ai-status";
-import { ClipActivity } from "./ClipActivity";
+import { ClipActivity, useLatestClipEvent } from "./ClipActivity";
 import { canExport } from "./export-graph";
 import { GraphCanvas } from "./GraphCanvas";
 import { type GraphView, neighborsOf } from "./graph-view";
 import { LinkaMark } from "./LinkaMark";
 import { NodeDetail } from "./NodeDetail";
+import { newConnectionsHighlight } from "./new-connections";
 import { PanelMenu, ResetDialog } from "./PanelMenu";
 import styles from "./SidePanel.module.css";
 import { useGraphView, useModelStatus, useStorage } from "./use-panel-data";
@@ -97,6 +98,8 @@ export function SidePanel() {
   const [resetOpen, setResetOpen] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const handoff = useAgentHandoff();
+  const clipEvent = useLatestClipEvent();
+  const highlight = useMemo(() => newConnectionsHighlight(clipEvent), [clipEvent]);
 
   const view = graph.kind === "loading" ? null : graph.view;
   const exportable = canExport(view);
@@ -150,7 +153,7 @@ export function SidePanel() {
         />
       </header>
 
-      <ClipActivity />
+      <ClipActivity event={clipEvent} />
 
       <section className={styles.graphWrap} aria-label="Knowledge graph">
         {view ? (
@@ -160,6 +163,7 @@ export function SidePanel() {
                 view={view}
                 selected={selected?.id ?? null}
                 focus={focus}
+                highlight={highlight}
                 onSelect={setSelectedId}
               />
             ) : (

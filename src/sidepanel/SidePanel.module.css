@@ -126,6 +126,30 @@
 .clipBad {
   color: var(--concern);
 }
+.clipResult {
+  display: grid;
+  gap: 4px;
+}
+.clipNote {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+/* 新しいつながり（UC2）。グラフでも同じ線を強調する */
+.clipConnections {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 3px;
+  max-height: 140px;
+  overflow-y: auto;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.clipConnections li::marker {
+  color: var(--solution);
+}
 
 .graphWrap {
   position: relative;

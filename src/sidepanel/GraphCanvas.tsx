@@ -5,6 +5,7 @@ import ForceGraph2D, {
   type NodeObject,
 } from "react-force-graph-2d";
 import type { GraphLink, GraphNode, GraphView, LinkType } from "./graph-view";
+import type { Highlight } from "./new-connections";
 import styles from "./SidePanel.module.css";
 import { tooltip } from "./tooltip";
 
@@ -99,12 +100,12 @@ function drawNode(node: Node, ctx: CanvasRenderingContext2D, scale: number, fade
   ctx.globalAlpha = 1;
 }
 
-function drawHalo(node: Node, ctx: CanvasRenderingContext2D, scale: number) {
+function drawHalo(node: Node, ctx: CanvasRenderingContext2D, scale: number, color = COLOR.act) {
   const u = unit(scale);
   ctx.beginPath();
   ctx.arc(node.x ?? 0, node.y ?? 0, (node.kind === "claim" ? 8 : 12) * u, 0, 2 * Math.PI);
   ctx.lineWidth = 2 * u;
-  ctx.strokeStyle = COLOR.act;
+  ctx.strokeStyle = color;
   ctx.stroke();
 }
 
@@ -142,12 +143,15 @@ export function GraphCanvas({
   view,
   selected,
   focus,
+  highlight,
   onSelect,
 }: {
   view: GraphView;
   selected: string | null;
   /** 選んだノードとその隣。null なら何も薄くしない */
   focus: ReadonlySet<string> | null;
+  /** 最後の記憶で新しくつながった組（UC2）。null なら強調しない */
+  highlight: Highlight | null;
   onSelect(id: string | null): void;
 }) {
   const graph = useRef<ForceGraphMethods<Node, Link> | undefined>(undefined);
@@ -180,6 +184,9 @@ export function GraphCanvas({
           nodeLabel={tooltip}
           nodeCanvasObject={(node, ctx, scale) => {
             if (node.id === selected) drawHalo(node, ctx, scale);
+            else if (highlight?.nodes.has(String(node.id))) {
+              drawHalo(node, ctx, scale, COLOR.solution);
+            }
             drawNode(node, ctx, scale, focus !== null && !focus.has(String(node.id)));
           }}
           nodePointerAreaPaint={(node, color, ctx, scale) => {
@@ -193,7 +200,18 @@ export function GraphCanvas({
             if (isLit(link)) return link.type === "ADDRESSES" ? COLOR.solution : COLOR.act;
             return focus ? `${base}26` : base;
           }}
-          linkWidth={(link) => (link.type === "ADDRESSES" ? 2.2 : isLit(link) ? 2.4 : 1)}
+          linkWidth={(link) =>
+            highlight?.links.has(link.id)
+              ? 4
+              : link.type === "ADDRESSES"
+                ? 2.2
+                : isLit(link)
+                  ? 2.4
+                  : 1
+          }
+          linkDirectionalParticles={(link) => (highlight?.links.has(link.id) ? 3 : 0)}
+          linkDirectionalParticleColor={() => COLOR.solution}
+          linkDirectionalParticleWidth={3}
           cooldownTicks={200}
           onEngineStop={() => {
             if (fitted.current) return;
