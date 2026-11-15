@@ -11,7 +11,7 @@ import {
   type RelateResult,
   type StorageState,
 } from "../shared/messages";
-import { EMPTINESS_QUERY, resetScript, shouldSeed } from "./seed";
+import { EMPTINESS_QUERY, resetScript, type SeedProgressStore, seedPlan, shouldSeed } from "./seed";
 import type { WorkerOp, WorkerRequest, WorkerResponse } from "./worker-protocol";
 
 export type WorkerPort = { post(request: WorkerRequest): void; terminate(): void };
@@ -37,6 +37,8 @@ export type DbClientOptions = {
   timers?: Timers;
   /** 空の DB を開いたときに入れ、`resetToDemo` で入れ直す Cypher スクリプト（`seed/demo.cypher`） */
   seed?: string;
+  /** OPFS のストアへの投入の進み具合を、グラフの外に残す先 */
+  seedProgress?: SeedProgressStore;
 };
 
 type DbOp = Exclude<DbRequest, { kind: "status" }>;
@@ -124,12 +126,20 @@ export class DbClient {
       job.resolve(failure("exception", messageOf(error)));
       return;
     }
+    // メモリ上の DB は開くたびに入れ直すので、進み具合は OPFS のストアの分だけ残す
+    const progress =
+      job.request.kind === "resetToDemo" && this.storage.kind === "opfs"
+        ? this.options.seedProgress
+        : undefined;
+    progress?.set("pending");
     const outcome = await this.call(op);
     if (outcome.kind === "response" && outcome.response.ok) {
       try {
         const value = outcome.response.value ?? [];
         const jsons = typeof value === "string" ? [value] : value;
-        job.resolve(typeof value === "string" ? classifyExecute(value) : classifyScript(jsons));
+        const result = typeof value === "string" ? classifyExecute(value) : classifyScript(jsons);
+        if (result.ok) progress?.set("done");
+        job.resolve(result);
         if (changedGraph(jsons)) this.notify({ type: "graphChanged" });
       } catch (error) {
         job.resolve(failure("exception", messageOf(error)));
@@ -196,7 +206,7 @@ export class DbClient {
   private async openIn(mode: "opfs" | "memory"): Promise<OpenFailure | null> {
     if (!this.worker) this.spawn();
     const outcome = await this.call({ op: "open", mode, uri: this.options.uri });
-    if (outcome.kind === "response" && outcome.response.ok) return this.seedIfEmpty();
+    if (outcome.kind === "response" && outcome.response.ok) return this.seed(mode);
     const reason = describeLoss(outcome)[1];
     if (outcome.kind === "response" && !outcome.response.ok && !outcome.response.trap) {
       // 開くのに失敗しただけなので worker はそのまま使える
@@ -205,16 +215,29 @@ export class DbClient {
     return this.lostWhileOpening(outcome);
   }
 
-  /** 開いた直後、待っている依頼より先に、空の DB にだけデモデータを入れる。メモリ上の DB は開くたびに空なので毎回入る */
-  private async seedIfEmpty(): Promise<OpenFailure | null> {
+  /** 開いた直後、待っている依頼より先にデモデータを入れる。メモリ上の DB は開くたびに空なので毎回入る */
+  private async seed(mode: "opfs" | "memory"): Promise<OpenFailure | null> {
     const seed = this.options.seed;
     if (seed === undefined) return null;
-    const check = await this.call({ op: "execute", query: EMPTINESS_QUERY, params: null });
-    if (isLost(check)) return this.lostWhileOpening(check);
-    if (!shouldSeed(classifyCheck(check))) return null;
-    const seeded = await this.call({ op: "executeScript", script: seed, params: null });
+    const progress = mode === "opfs" ? this.options.seedProgress : undefined;
+    const plan = seedPlan(progress?.get() ?? null);
+    if (plan === "none") return null;
+    if (plan === "ifEmpty") {
+      const check = await this.call({ op: "execute", query: EMPTINESS_QUERY, params: null });
+      if (isLost(check)) return this.lostWhileOpening(check);
+      const checked = classifyCheck(check);
+      if (!shouldSeed(checked)) {
+        // 記録の無いまま中身のあるストアは、投入の要らない利用者のグラフとして扱う
+        if (checked.ok) progress?.set("done");
+        return null;
+      }
+    }
+    progress?.set("pending");
+    const script = plan === "finish" ? resetScript(seed) : seed;
+    const seeded = await this.call({ op: "executeScript", script, params: null });
     if (isLost(seeded)) return this.lostWhileOpening(seeded);
-    // Relate のエラーで途中までしか入らなくても DB は使えるので、開けたことにする。Reset で入れ直せる
+    // Relate のエラーで途中までしか入らなくても DB は使えるので開けたことにし、pending のまま次に開くときに入れ直す
+    if (scriptSucceeded(seeded)) progress?.set("done");
     this.notify({ type: "graphChanged" });
     return null;
   }
@@ -309,6 +332,18 @@ function toWorkerOp(request: DbOp, seed: string | undefined): WorkerOp {
 /** 時間切れ・trap・worker が落ちた、のどれか。worker は作り直すしかない */
 function isLost(outcome: Outcome): boolean {
   return outcome.kind !== "response" || (!outcome.response.ok && outcome.response.trap);
+}
+
+/** 投入のスクリプトがすべての文で成功したか */
+function scriptSucceeded(outcome: Outcome): boolean {
+  if (outcome.kind !== "response" || !outcome.response.ok) return false;
+  const { value } = outcome.response;
+  if (!Array.isArray(value)) return false;
+  try {
+    return classifyScript(value).ok;
+  } catch {
+    return false;
+  }
 }
 
 function classifyCheck(outcome: Outcome): DbResponse<RelateResult> {

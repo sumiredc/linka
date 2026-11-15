@@ -10,6 +10,7 @@ import {
 import { languageModel } from "../shared/prompt-api";
 import { DbClient } from "./db-client";
 import { ModelTracker } from "./model-tracker";
+import { storedSeedProgress } from "./seed";
 import type { WorkerResponse } from "./worker-protocol";
 
 // execute は止められないので、これを超えたら worker ごと作り直す
@@ -22,6 +23,7 @@ const client = new DbClient({
   lockRetry: { attempts: 40, delayMs: 250 },
   // CLI が data/linka.rl を作るのと同じファイルを、文字列としてバンドルに含める
   seed: demoCypher,
+  seedProgress: storedSeedProgress(localStorage),
   createWorker: ({ onMessage, onError }) => {
     const worker = new Worker(new URL("./relate.worker.ts", import.meta.url), { type: "module" });
     worker.onmessage = (event: MessageEvent<WorkerResponse>) => onMessage(event.data);
