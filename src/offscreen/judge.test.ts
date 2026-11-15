@@ -10,14 +10,11 @@ import type {
 import {
   JUDGE_INSTRUCTION_VARIANTS,
   JUDGE_INSTRUCTIONS,
-  JUDGE_RESPONSE_CONSTRAINTS,
   JudgementSchema,
   judgeCandidates,
-  judgePair,
   judgePrompt,
   openJudgeSession,
   parseJudgement,
-  ReasonedJudgementSchema,
 } from "./judge";
 
 type Answer = string | Error | "hang";
@@ -156,30 +153,6 @@ describe("judge instructions", () => {
     expect(model.systemPrompts).toEqual([JUDGE_INSTRUCTIONS]);
   });
 
-  it("asks the reasoned variant to write the problem and the remedy before the answer", () => {
-    const constraint = JUDGE_RESPONSE_CONSTRAINTS.reasoned as { properties: object };
-    expect(Object.keys(constraint.properties)).toEqual(["problem", "remedy", "addresses"]);
-    expect(constraint).toEqual(z.toJSONSchema(ReasonedJudgementSchema));
-  });
-
-  it("judges a pair with the answer shape it is given", async () => {
-    const model = new FakeModel([
-      JSON.stringify({ problem: "p", remedy: "none", addresses: false }),
-    ]);
-    const opened = await openJudgeSession(model, JUDGE_INSTRUCTION_VARIANTS.reasoned);
-    if (!opened.ok) throw new Error("the session did not open");
-    const result = await judgePair(
-      opened.base,
-      candidate(1),
-      1_000,
-      JUDGE_RESPONSE_CONSTRAINTS.reasoned,
-    );
-    expect(result).toEqual({ ok: true, addresses: false });
-    expect(model.prompts[0]?.options?.responseConstraint).toEqual(
-      JUDGE_RESPONSE_CONSTRAINTS.reasoned,
-    );
-  });
-
   it("opens a session with the instructions it is given", async () => {
     const model = new FakeModel([]);
     const opened = await openJudgeSession(model, JUDGE_INSTRUCTION_VARIANTS.strict);
@@ -200,8 +173,5 @@ describe("judge prompt and answer", () => {
     expect(parseJudgement(no)).toBe(false);
     expect(parseJudgement('{"addresses":"yes"}')).toBeNull();
     expect(parseJudgement("yes")).toBeNull();
-    expect(parseJudgement(JSON.stringify({ problem: "p", remedy: "r", addresses: true }))).toBe(
-      true,
-    );
   });
 });
