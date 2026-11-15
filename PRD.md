@@ -71,7 +71,7 @@ Linka は、読んだページから概念・主張（課題・解決策など�
 | Relate Wasm | `@relate/relate-wasm`（v1.0.x）。永続化できるのは OPFS（`opfs://<name>`）だけで、**dedicated worker の中で開く必要がある**。`.rl` ファイルは読めない。ストアの import/export API は無い | relate リポジトリ `docs/api/wasm/spec.md`, ADR-0145 |
 | Relate Wasm | `execute` は同期で、結果は JSON 文字列。エラーは例外でなく `error` に返る。トランザクション API は無い。panic 後のインスタンスは使えない | 同上 |
 | Relate Wasm | 同じ OPFS ストアを開けるのは同時に 1 か所だけ（`storage locked`）。MV3 の service worker からは dedicated worker を作れない | ADR-0145、MV3 の service worker の制約 |
-| Prompt API | Chrome 138 以降の拡張機能で利用可能。**Web Worker からは使えない。** offscreen document とサイドパネルでは使える（実記事 1 本の抽出が 2〜4 秒）。対応言語は en / ja / es / de / fr | developer.chrome.com/docs/ai/prompt-api、`spikes/offscreen-clip` |
+| Prompt API | Chrome 138 以降の拡張機能で利用可能。**Web Worker からは使えない。** offscreen document とサイドパネルでは使える（実記事 1 本の抽出が 2〜4 秒。ただし約 30,000 文字を 1 回で渡すと、環境によっては 90 秒を超えた（2026-11-15、§7））。対応言語は en / ja / es / de / fr | developer.chrome.com/docs/ai/prompt-api、`spikes/offscreen-clip` |
 | Prompt API | 必要環境：空きディスク 22GB 以上、VRAM 4GB 超 または RAM 16GB 以上。審査員の環境の 2〜4 割では動かないと見込む | 同上（割合は推定） |
 | Prompt API | コンテキストは 9216 トークン（`contextWindow` と `inputQuota`）。英語の本文は約 4.5 文字で 1 トークン。長い記事は分割が必要 | Chrome 157（macOS）で実測（2026-11-15） |
 | Prompt API | 同じセッションに 2 回目の `prompt` を送ると、`kErrorUnknown` ですぐ失敗することがある（Cypher の作り直しで 4 回中 4 回）。`clone` したセッションへの 1 回目は通る | 同上 |
