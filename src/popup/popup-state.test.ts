@@ -102,6 +102,33 @@ describe("popupReducer: opening the popup", () => {
     });
   });
 
+  it("uses the result of a clip of this page that finished while checking", () => {
+    const state = run(
+      { type: "model", status: { kind: "available" } },
+      { type: "event", event: { kind: "finished", target: thisPage, result: succeeded } },
+      {
+        type: "checked",
+        page,
+        current: { target: thisPage, stage: { kind: "writing" } },
+        clipped: null,
+      },
+    );
+    expect(at(state)).toEqual({ kind: "done", summary });
+  });
+
+  it("notes that the other clip finished while checking", () => {
+    const state = run(
+      { type: "event", event: { kind: "finished", target: otherPage, result: succeeded } },
+      checked({ current: { target: otherPage, stage: { kind: "writing" } } }),
+    );
+    expect(at(state)).toEqual({ kind: "busy", clipping: otherPage, finished: true });
+  });
+
+  it("ignores a check that arrives after the popup left checking", () => {
+    const state = run(checked(), checked({ clipped: { url: PAGE_URL, clippedAt: null } }));
+    expect(at(state)).toEqual({ kind: "starting" });
+  });
+
   it("gives the reason when the page cannot be read", () => {
     expect(at(run({ type: "blocked", reason: "no text" }))).toEqual({
       kind: "cannotClip",

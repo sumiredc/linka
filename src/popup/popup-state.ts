@@ -33,11 +33,15 @@ export type PopupView =
   /** モデルの状態がまだ分からない、またはダウンロードが終わるまで記憶を受け付けない */
   | { kind: "waitingForModel" };
 
+/** 確かめている間に終わった記憶。`current` の返事が、終わる前の古いものでありうるため */
+export type FinishedClip = Extract<ClipEvent, { kind: "finished" }>;
+
 export type PopupState = {
   page: PopupPage | null;
   view: PopupView;
   /** Gemini Nano の状態。吹き出しが読むまで null */
   model: ModelStatus | null;
+  finishedWhileChecking: FinishedClip[];
 };
 
 export type PopupAction =
@@ -60,6 +64,7 @@ export const initialPopupState: PopupState = {
   page: null,
   view: { kind: "checking" },
   model: null,
+  finishedWhileChecking: [],
 };
 
 /** 記憶を始めてよいか。同梱サンプルは Gemini Nano を使わない */
@@ -94,6 +99,10 @@ const isClipping = (view: PopupView) => view.kind === "starting" || view.kind ==
 
 function onEvent(state: PopupState, event: ClipEvent): PopupState {
   const { page, view } = state;
+  if (view.kind === "checking") {
+    if (event.kind !== "finished") return state;
+    return { ...state, finishedWhileChecking: [...state.finishedWhileChecking, event] };
+  }
   const target = event.kind === "progress" ? event.progress.target : event.target;
   if (view.kind === "busy") {
     if (event.kind !== "finished" || target.url !== view.clipping.url) return state;
@@ -138,26 +147,32 @@ function onChecked(
   state: PopupState,
   { page, current, clipped }: Extract<PopupAction, { type: "checked" }>,
 ): PopupState {
+  const next = { ...state, page, finishedWhileChecking: [] };
   if (current !== null) {
+    const finished = state.finishedWhileChecking
+      .filter((event) => event.target.url === current.target.url)
+      .at(-1);
+    if (current.target.url === page.url) {
+      return {
+        ...next,
+        view: finished ? resultView(finished.result) : { kind: "clipping", stage: current.stage },
+      };
+    }
     return {
-      ...state,
-      page,
-      view:
-        current.target.url === page.url
-          ? { kind: "clipping", stage: current.stage }
-          : { kind: "busy", clipping: current.target, finished: false },
+      ...next,
+      view: { kind: "busy", clipping: current.target, finished: finished !== undefined },
     };
   }
   if (clipped !== null) {
-    return { ...state, page, view: { kind: "alreadyClipped", clippedAt: clipped.clippedAt } };
+    return { ...next, view: { kind: "alreadyClipped", clippedAt: clipped.clippedAt } };
   }
-  return { ...state, page, view: startView(page, state.model) };
+  return { ...next, view: startView(page, state.model) };
 }
 
 export function popupReducer(state: PopupState, action: PopupAction): PopupState {
   switch (action.type) {
     case "checked":
-      return onChecked(state, action);
+      return state.view.kind === "checking" ? onChecked(state, action) : state;
     case "blocked":
       return { ...state, view: { kind: "cannotClip", reason: action.reason } };
     case "model": {
@@ -174,7 +189,7 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
       return { ...state, view: startView(state.page, state.model) };
     case "checkAgain":
       if (state.view.kind !== "busy") return state;
-      return { ...state, view: { kind: "checking" } };
+      return { ...state, view: { kind: "checking" }, finishedWhileChecking: [] };
   }
 }
 
