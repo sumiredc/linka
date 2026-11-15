@@ -14,6 +14,15 @@ export type ClipSource = z.infer<typeof ClipSourceSchema>;
 
 const ConceptNameSchema = z.string().min(1).max(60);
 
+/** {@link ExtractionSchema} の件数の上限。分割した本文の結果をまとめるときも、この数に収める */
+export const EXTRACTION_LIMITS = {
+  concepts: 20,
+  authors: 5,
+  claims: 20,
+  conceptsPerClaim: 5,
+  relatedConcepts: 20,
+} as const;
+
 /** 1 ページ（または選択範囲）から抽出した内容。Concept は名前で参照し、key はコード側で作る。 */
 export const ExtractionSchema = z.object({
   summary: z.string().max(600),
@@ -24,17 +33,17 @@ export const ExtractionSchema = z.object({
         category: z.string().min(1).max(40),
       }),
     )
-    .max(20),
-  authors: z.array(z.string().min(1).max(80)).max(5),
+    .max(EXTRACTION_LIMITS.concepts),
+  authors: z.array(z.string().min(1).max(80)).max(EXTRACTION_LIMITS.authors),
   claims: z
     .array(
       z.object({
         statement: z.string().min(1).max(300),
         type: ClaimTypeSchema,
-        concepts: z.array(ConceptNameSchema).max(5),
+        concepts: z.array(ConceptNameSchema).max(EXTRACTION_LIMITS.conceptsPerClaim),
       }),
     )
-    .max(20),
+    .max(EXTRACTION_LIMITS.claims),
   relatedConcepts: z
     .array(
       z.object({
@@ -42,7 +51,7 @@ export const ExtractionSchema = z.object({
         to: ConceptNameSchema,
       }),
     )
-    .max(20),
+    .max(EXTRACTION_LIMITS.relatedConcepts),
 });
 export type Extraction = z.infer<typeof ExtractionSchema>;
 
