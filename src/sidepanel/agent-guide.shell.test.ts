@@ -14,21 +14,36 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   BUILD_STORE_COMMAND,
   BUILD_STORE_FROM_LINKA_COMMAND,
-  NO_EXPORT_IN_DOWNLOADS,
   NO_EXPORT_IN_LINKA,
 } from "./agent-guide";
 
 // 利用者がターミナルに貼るのは sh・bash・zsh のどれか。手元に無いシェルは飛ばす
-const SHELLS = ["sh", "bash", "zsh"].filter(
-  (shell) => spawnSync("sh", ["-c", `command -v ${shell}`]).status === 0,
-);
+const installed = (shells: string[]) =>
+  shells.filter((shell) => spawnSync("sh", ["-c", `command -v ${shell}`]).status === 0);
+const SHELLS = installed(["sh", "bash", "zsh"]);
+// set -o pipefail を確実に持つシェル
+const PIPEFAIL_SHELLS = installed(["bash", "zsh"]);
+
+type Case = [string, () => void];
+
+// root はパーミッションに関係なく読めるので、読めないファイルを作れない
+const isRoot = process.getuid?.() === 0;
 
 // relate の代わりに、-d で渡されたファイルへ stdin を書く
 const FAKE_RELATE = '#!/bin/sh\nwhile [ "$1" != "-d" ]; do shift; done\ncat > "$2"\n';
 
+// 利用者の設定でよくある、ls と grep の出力を変えるもの。command はシェル関数も alias も通さない
+const LS_AS_LONG_LIST = 'ls() { /bin/ls -l "$@"; }\n';
+const REAL_GREP = spawnSync("sh", ["-c", "command -v grep"], { encoding: "utf8" }).stdout.trim();
+const COLOURING_GREP = `#!/bin/sh\nexec ${REAL_GREP} --color=always "$@"\n`;
+
 let home = "";
 afterEach(() => {
-  if (home) rmSync(home, { recursive: true, force: true });
+  if (home) {
+    chmodSync(home, 0o755);
+    spawnSync("chmod", ["-R", "u+rwX", home]);
+    rmSync(home, { recursive: true, force: true });
+  }
   home = "";
 });
 
@@ -40,17 +55,20 @@ function setUp() {
   chmodSync(join(bin, "relate"), 0o755);
   mkdirSync(join(home, "linka"));
   writeFileSync(join(home, "linka", "linka.rl"), "previous store");
-  return home;
 }
 
 function write(path: string, text: string, ageSeconds = 0) {
   writeFileSync(join(home, path), text);
+  touch(path, ageSeconds);
+}
+
+function touch(path: string, ageSeconds = 0) {
   const time = Date.now() / 1000 - ageSeconds;
   utimesSync(join(home, path), time, time);
 }
 
-function run(shell: string, command: string) {
-  const result = spawnSync(shell, ["-c", command], {
+function run(shell: string, command: string, prelude = "") {
+  const result = spawnSync(shell, ["-c", prelude + command], {
     env: { HOME: home, PATH: `${join(home, "bin")}:${process.env.PATH}` },
     encoding: "utf8",
   });
@@ -60,6 +78,9 @@ function run(shell: string, command: string) {
     store: readFileSync(join(home, "linka", "linka.rl"), "utf8"),
   };
 }
+
+// 探した場所はシェルが展開した $downloads で出す（1 行目を書き換えた人にもそこが出る）
+const notFound = () => `linka: no readable linka-export*.cypher in ${join(home, "Downloads")}`;
 
 describe.each(SHELLS)("in %s, the command that makes linka.rl from ~/Downloads", (shell) => {
   it("loads the newest linka-export*.cypher, because Chrome saves a re-export as linka-export (1).cypher", () => {
@@ -72,20 +93,75 @@ describe.each(SHELLS)("in %s, the command that makes linka.rl from ~/Downloads",
     expect(store).toBe("newer");
   });
 
-  it.each([
+  it("finds the export when ls is redefined to print a long listing", () => {
+    setUp();
+    mkdirSync(join(home, "Downloads"));
+    write("Downloads/linka-export.cypher", "export");
+    const { status, store } = run(shell, BUILD_STORE_COMMAND, LS_AS_LONG_LIST);
+    expect(status).toBe(0);
+    expect(store).toBe("export");
+  });
+
+  it("finds the export when grep on PATH colours its output", () => {
+    setUp();
+    writeFileSync(join(home, "bin", "grep"), COLOURING_GREP);
+    chmodSync(join(home, "bin", "grep"), 0o755);
+    mkdirSync(join(home, "Downloads"));
+    write("Downloads/linka-export.cypher", "export");
+    const { status, store } = run(shell, BUILD_STORE_COMMAND);
+    expect(status).toBe(0);
+    expect(store).toBe("export");
+  });
+
+  it.each<Case>([
     ["is empty", () => mkdirSync(join(home, "Downloads"))],
     ["does not exist", () => {}],
+    [
+      "has a directory named like an export as its newest entry",
+      () => {
+        mkdirSync(join(home, "Downloads"));
+        write("Downloads/linka-export.cypher", "older", 60);
+        mkdirSync(join(home, "Downloads", "linka-export (2).cypher"));
+        touch("Downloads/linka-export (2).cypher");
+      },
+    ],
+    ...(isRoot
+      ? []
+      : ([
+          [
+            "has an unreadable export",
+            () => {
+              mkdirSync(join(home, "Downloads"));
+              write("Downloads/linka-export.cypher", "secret");
+              chmodSync(join(home, "Downloads", "linka-export.cypher"), 0);
+            },
+          ],
+        ] satisfies Case[])),
   ])(
-    "says no export was found and keeps the previous linka.rl when ~/Downloads %s",
+    "says no readable export was found and keeps the previous linka.rl when ~/Downloads %s",
     (_, arrange) => {
       setUp();
       arrange();
       const { status, stderr, store } = run(shell, BUILD_STORE_COMMAND);
       expect(status).not.toBe(0);
-      expect(stderr).toContain(NO_EXPORT_IN_DOWNLOADS);
+      expect(stderr).toContain(notFound());
       expect(store).toBe("previous store");
     },
   );
+});
+
+describe.each(PIPEFAIL_SHELLS)("in %s with pipefail", (shell) => {
+  it("finds the newest export in a Downloads folder too big for one pipe buffer", () => {
+    setUp();
+    mkdirSync(join(home, "Downloads"));
+    for (let i = 0; i < 2000; i++) {
+      write(`Downloads/an-older-download-with-a-fairly-long-name-${i}.pdf`, "", 120);
+    }
+    write("Downloads/linka-export.cypher", "export");
+    const { status, store } = run(shell, BUILD_STORE_COMMAND, "set -o pipefail\n");
+    expect(status).toBe(0);
+    expect(store).toBe("export");
+  });
 });
 
 describe.each(SHELLS)("in %s, the command that makes linka.rl from ~/linka", (shell) => {
@@ -97,8 +173,23 @@ describe.each(SHELLS)("in %s, the command that makes linka.rl from ~/linka", (sh
     expect(store).toBe("moved");
   });
 
-  it("says the file is missing and keeps the previous linka.rl when it was not moved there", () => {
+  it.each<Case>([
+    ["was not moved there", () => {}],
+    ["is a directory", () => mkdirSync(join(home, "linka", "linka-export.cypher"))],
+    ...(isRoot
+      ? []
+      : ([
+          [
+            "is unreadable",
+            () => {
+              write("linka/linka-export.cypher", "secret");
+              chmodSync(join(home, "linka", "linka-export.cypher"), 0);
+            },
+          ],
+        ] satisfies Case[])),
+  ])("says so and keeps the previous linka.rl when the file %s", (_, arrange) => {
     setUp();
+    arrange();
     const { status, stderr, store } = run(shell, BUILD_STORE_FROM_LINKA_COMMAND);
     expect(status).not.toBe(0);
     expect(stderr).toContain(NO_EXPORT_IN_LINKA);
