@@ -65,6 +65,7 @@ export class DbClient {
   private queue: Job[] = [];
   private pumping = false;
   private needsOpen = true;
+  private opening = false;
   private opfsOpened = false;
   private storage: StorageState = { kind: "starting" };
 
@@ -77,7 +78,8 @@ export class DbClient {
   request<R extends DbRequest>(request: R): Promise<DbResponse<DbResultOf<R>>>;
   request(request: DbRequest): Promise<DbResponse> {
     if (request.kind === "status") return Promise.resolve({ ok: true, value: this.storage });
-    if (this.storage.kind === "unavailable") this.needsOpen = true;
+    // 開き直しの最中なら、その結果をこの依頼にも使う（重ねて開くと自分のロックで失敗する）
+    if (this.storage.kind === "unavailable" && !this.opening) this.needsOpen = true;
     return new Promise((resolve) => {
       this.queue.push({ request, resolve });
       void this.pump();
@@ -91,7 +93,12 @@ export class DbClient {
       while (this.needsOpen || this.queue.length > 0) {
         if (this.needsOpen) {
           this.needsOpen = false;
-          await this.open();
+          this.opening = true;
+          try {
+            await this.open();
+          } finally {
+            this.opening = false;
+          }
         }
         if (this.storage.kind === "unavailable") {
           this.failQueue("unavailable", `database is unavailable: ${this.storage.reason}`);
