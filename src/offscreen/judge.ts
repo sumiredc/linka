@@ -18,7 +18,7 @@ const CURRENT_JUDGE_INSTRUCTIONS = [
 /** 解決策の文そのものが、懸念の文の問題への手立てを述べているときだけ true にさせる版（#47） */
 const STRICT_JUDGE_INSTRUCTIONS = [
   "You decide whether a solution taken from one web page about software development addresses a concern taken from another page.",
-  "First name the specific problem, risk or limitation that the concern states.",
+  "Consider the specific problem, risk or limitation that the concern states.",
   "Answer addresses: true only if the solution statement itself names a way to solve, avoid or reduce that specific problem, so that someone who has the problem could act on the solution to get rid of it.",
   "Answer addresses: false if the solution only states a fact about what a technology is or can do without tackling that problem, if they only share a technology or topic, or if the solution is about a different problem, even a related one.",
   "If you are not sure, answer addresses: false.",
