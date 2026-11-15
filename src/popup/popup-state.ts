@@ -14,7 +14,7 @@ import type { DbResponse } from "../shared/messages";
 import type { ModelStatus } from "../shared/model-status";
 
 /** 吹き出しを開いたタブのページ。`url` は Page の URL（正規化したもの） */
-export type PopupPage = { url: string; sample: boolean; model: ModelStatus };
+export type PopupPage = { url: string; sample: boolean };
 
 export type PopupView =
   /** 進行中の記憶・記憶済みか・モデルの状態を尋ねている */
@@ -30,10 +30,15 @@ export type PopupView =
   | { kind: "cannotClip"; reason: string }
   /** 別のページを記憶している。`finished` はそれが終わったか */
   | { kind: "busy"; clipping: ClipTarget; finished: boolean }
-  /** モデルのダウンロードが終わるまで記憶を受け付けない */
-  | { kind: "waitingForModel"; model: ModelStatus };
+  /** モデルの状態がまだ分からない、またはダウンロードが終わるまで記憶を受け付けない */
+  | { kind: "waitingForModel" };
 
-export type PopupState = { page: PopupPage | null; view: PopupView };
+export type PopupState = {
+  page: PopupPage | null;
+  view: PopupView;
+  /** Gemini Nano の状態。吹き出しが読むまで null */
+  model: ModelStatus | null;
+};
 
 export type PopupAction =
   | {
@@ -51,19 +56,32 @@ export type PopupAction =
   | { type: "clipAgain" }
   | { type: "checkAgain" };
 
-export const initialPopupState: PopupState = { page: null, view: { kind: "checking" } };
+export const initialPopupState: PopupState = {
+  page: null,
+  view: { kind: "checking" },
+  model: null,
+};
 
 /** 記憶を始めてよいか。同梱サンプルは Gemini Nano を使わない */
-function startView(page: PopupPage): PopupView {
+function startView(page: PopupPage, model: ModelStatus | null): PopupView {
   if (page.sample) return { kind: "starting" };
-  switch (page.model.kind) {
+  switch (model?.kind) {
     case "available":
       return { kind: "starting" };
     case "unavailable":
-      return { kind: "cannotClip", reason: aiUnavailableText(page.model.reason) };
+      return { kind: "cannotClip", reason: aiUnavailableText(model.reason) };
     default:
-      return { kind: "waitingForModel", model: page.model };
+      return { kind: "waitingForModel" };
   }
+}
+
+/**
+ * 吹き出しからモデルのダウンロードを始める（または進んでいるダウンロードの終わりを待つ）か。
+ * 利用者の操作の中でないと始められないことがあるので、offscreen document には頼まない。
+ * ほかが始めたダウンロードも待つので、進み具合の通知が来なくても終わった状態を受け取れる
+ */
+export function shouldDownloadInPopup(status: ModelStatus): boolean {
+  return status.kind === "downloadable" || status.kind === "downloading";
 }
 
 function resultView(result: ClipResult): PopupView {
@@ -116,29 +134,36 @@ function onAnswer(state: PopupState, response: DbResponse<ClipResult>): PopupSta
   return { ...state, view: resultView(result) };
 }
 
+function onChecked(
+  state: PopupState,
+  { page, current, clipped }: Extract<PopupAction, { type: "checked" }>,
+): PopupState {
+  if (current !== null) {
+    return {
+      ...state,
+      page,
+      view:
+        current.target.url === page.url
+          ? { kind: "clipping", stage: current.stage }
+          : { kind: "busy", clipping: current.target, finished: false },
+    };
+  }
+  if (clipped !== null) {
+    return { ...state, page, view: { kind: "alreadyClipped", clippedAt: clipped.clippedAt } };
+  }
+  return { ...state, page, view: startView(page, state.model) };
+}
+
 export function popupReducer(state: PopupState, action: PopupAction): PopupState {
   switch (action.type) {
-    case "checked": {
-      const { page, current, clipped } = action;
-      if (current !== null) {
-        return {
-          page,
-          view:
-            current.target.url === page.url
-              ? { kind: "clipping", stage: current.stage }
-              : { kind: "busy", clipping: current.target, finished: false },
-        };
-      }
-      if (clipped !== null)
-        return { page, view: { kind: "alreadyClipped", clippedAt: clipped.clippedAt } };
-      return { page, view: startView(page) };
-    }
+    case "checked":
+      return onChecked(state, action);
     case "blocked":
       return { ...state, view: { kind: "cannotClip", reason: action.reason } };
     case "model": {
-      if (state.page === null) return state;
-      const page = { ...state.page, model: action.status };
-      return { page, view: state.view.kind === "waitingForModel" ? startView(page) : state.view };
+      const model = action.status;
+      if (state.page === null || state.view.kind !== "waitingForModel") return { ...state, model };
+      return { ...state, model, view: startView(state.page, model) };
     }
     case "answered":
       return onAnswer(state, action.response);
@@ -146,7 +171,7 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
       return onEvent(state, action.event);
     case "clipAgain":
       if (state.page === null || state.view.kind !== "alreadyClipped") return state;
-      return { ...state, view: startView(state.page) };
+      return { ...state, view: startView(state.page, state.model) };
     case "checkAgain":
       if (state.view.kind !== "busy") return state;
       return { ...state, view: { kind: "checking" } };

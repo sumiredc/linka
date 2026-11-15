@@ -11,10 +11,11 @@ import {
   popupReducer,
   progressSteps,
   readFailureText,
+  shouldDownloadInPopup,
 } from "./popup-state";
 
 const PAGE_URL = "https://example.com/a";
-const page: PopupPage = { url: PAGE_URL, sample: false, model: { kind: "available" } };
+const page: PopupPage = { url: PAGE_URL, sample: false };
 const thisPage: ClipTarget = { url: PAGE_URL, tabUrl: PAGE_URL, title: "Page A" };
 const otherPage: ClipTarget = {
   url: "https://example.com/b",
@@ -32,21 +33,19 @@ const summary: ClipSummary = {
 };
 const succeeded: ClipResult = { ok: true, summary };
 
-function run(...actions: PopupAction[]): PopupState {
-  return actions.reduce(popupReducer, initialPopupState);
+function run(...actions: (PopupAction | PopupAction[])[]): PopupState {
+  return actions.flat().reduce(popupReducer, initialPopupState);
 }
 
+/** モデルの状態を読んでから（既定は使える）、ページを確かめ終える */
 function checked(
   over: Partial<Extract<PopupAction, { type: "checked" }>> & { model?: ModelStatus } = {},
-): PopupAction {
-  const { model, ...rest } = over;
-  return {
-    type: "checked",
-    page: model ? { ...page, model } : page,
-    current: null,
-    clipped: null,
-    ...rest,
-  };
+): PopupAction[] {
+  const { model = { kind: "available" }, ...rest } = over;
+  return [
+    { type: "model", status: model },
+    { type: "checked", page, current: null, clipped: null, ...rest },
+  ];
 }
 
 const at = (state: PopupState): PopupView => state.view;
@@ -58,7 +57,7 @@ describe("popupReducer: opening the popup", () => {
 
   it("starts clipping a sample page even when Gemini Nano is not available", () => {
     const state = run(
-      checked({ page: { ...page, sample: true, model: { kind: "unavailable", reason: "r" } } }),
+      checked({ page: { ...page, sample: true }, model: { kind: "unavailable", reason: "r" } }),
     );
     expect(at(state)).toEqual({ kind: "starting" });
   });
@@ -86,15 +85,21 @@ describe("popupReducer: opening the popup", () => {
 
   it("waits for the model while it downloads", () => {
     const state = run(checked({ model: { kind: "downloading", progress: 0.4 } }));
-    expect(at(state)).toEqual({
-      kind: "waitingForModel",
-      model: { kind: "downloading", progress: 0.4 },
-    });
+    expect(at(state)).toEqual({ kind: "waitingForModel" });
+    expect(state.model).toEqual({ kind: "downloading", progress: 0.4 });
   });
 
   it("waits for the model when it is not downloaded yet", () => {
     const model: ModelStatus = { kind: "downloadable", error: "NotAllowedError: x" };
-    expect(at(run(checked({ model })))).toEqual({ kind: "waitingForModel", model });
+    expect(at(run(checked({ model })))).toEqual({ kind: "waitingForModel" });
+  });
+
+  it("waits when the page is checked before the model status is read", () => {
+    const state = run({ type: "checked", page, current: null, clipped: null });
+    expect(at(state)).toEqual({ kind: "waitingForModel" });
+    expect(at(popupReducer(state, { type: "model", status: { kind: "available" } }))).toEqual({
+      kind: "starting",
+    });
   });
 
   it("gives the reason when the page cannot be read", () => {
@@ -113,10 +118,8 @@ describe("popupReducer: model download", () => {
       type: "model",
       status: { kind: "downloading", progress: 0.7 },
     });
-    expect(at(state)).toEqual({
-      kind: "waitingForModel",
-      model: { kind: "downloading", progress: 0.7 },
-    });
+    expect(at(state)).toEqual({ kind: "waitingForModel" });
+    expect(state.model).toEqual({ kind: "downloading", progress: 0.7 });
   });
 
   it("starts clipping when the download finishes", () => {
@@ -281,5 +284,20 @@ describe("readFailureText", () => {
     expect(readFailureText("failed", "Frame was removed")).toBe(
       "Linka could not read this page: Frame was removed",
     );
+  });
+});
+
+describe("shouldDownloadInPopup", () => {
+  it("downloads a model that is not downloaded yet", () => {
+    expect(shouldDownloadInPopup({ kind: "downloadable", error: null })).toBe(true);
+  });
+
+  it("waits for a download that is already running, so the popup sees it finish", () => {
+    expect(shouldDownloadInPopup({ kind: "downloading", progress: null })).toBe(true);
+  });
+
+  it("does nothing when the model is ready or cannot run", () => {
+    expect(shouldDownloadInPopup({ kind: "available" })).toBe(false);
+    expect(shouldDownloadInPopup({ kind: "unavailable", reason: "r" })).toBe(false);
   });
 });
