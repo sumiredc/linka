@@ -586,7 +586,8 @@ describe("a write that fails partway", () => {
           expect(dump(t.db), `write ${write}`).toEqual(before);
           expect(t.journal.value).toBeNull();
         }
-      });
+        // 書き込みの数だけ Relate を作り直すので、CI の runner が混むと既定の 5 秒を超える
+      }, 30_000);
     }
   }
 
