@@ -121,11 +121,18 @@ const WRITE = /\b(MERGE|CREATE|SET|DELETE)\b/;
  * `down` の間は、すべての文が失敗する
  */
 function testDb(db: RelateDb) {
-  const state = { faults: [] as Fault[], writes: 0, down: false };
+  const state = {
+    faults: [] as Fault[],
+    writes: 0,
+    down: false,
+    /** 書き込みの文を流す直前に呼ぶ。Promise を返すと、それが終わるまで流さない */
+    beforeWrite: null as ((write: number, query: string) => Promise<void> | undefined) | null,
+  };
   const execute: ClipDb["execute"] = async (statement: CypherStatement) => {
     if (state.down) return failure("unavailable", "the database is down");
     const isWrite = WRITE.test(statement.query);
     if (isWrite) state.writes++;
+    if (isWrite) await state.beforeWrite?.(state.writes, statement.query);
     const fault = isWrite ? state.faults.find((f) => f.write === state.writes) : undefined;
     const hit = fault !== undefined;
     if (hit && fault.when === "before") return failure("relate", "injected failure");
@@ -650,5 +657,23 @@ describe("a write that fails partway", () => {
     expect(result).toMatchObject({ ok: false, error: { kind: "write", restored: false } });
     expect(dump(t.db)).toEqual(before);
     expect(t.journal.value).not.toBeNull();
+  });
+});
+
+describe("the undo of a clip being written", () => {
+  it("is not run by an isClipped asked in the middle of the write", async () => {
+    const t = setup({ model: new FakeModel([answer(FIRST)]) });
+    let asked: Promise<unknown> | null = null;
+    t.conn.state.beforeWrite = (write) => {
+      if (write === 2) asked = t.pipeline.isClipped(PAGE);
+      return undefined;
+    };
+    expect(await t.pipeline.clip(PAGE, "Graph", text())).toMatchObject({ ok: true });
+    await asked;
+    expect(count(t.db, "MATCH (p:Page {url: $url}) RETURN count(p) AS n", { url: PAGE })).toBe(1);
+    expect(
+      count(t.db, "MATCH (:Page {url: $url})-[:ASSERTS]->() RETURN count(*) AS n", { url: PAGE }),
+    ).toBe(FIRST.claims.length);
+    expect(t.journal.value).toBeNull();
   });
 });

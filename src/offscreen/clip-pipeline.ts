@@ -67,6 +67,8 @@ function dbError(response: DbResponse): string {
 export class ClipPipeline {
   #current: ClipProgress | null = null;
   #recovery: Promise<boolean> = Promise.resolve(true);
+  /** 取り消しの文を残してから書き終えるまで。その間の取り消しの記録は、書いている最中の記憶のもの */
+  #writing = false;
   /** 例外も失敗の返事にそろえ、書き込みの途中で投げられても取り消しまで進める */
   readonly #db: ClipDb;
 
@@ -218,39 +220,48 @@ export class ClipPipeline {
       isNew = before.page === null;
       const existing = new Set(before.concepts.map((concept) => concept.key));
       newConcepts = rows.concepts.filter((concept) => !existing.has(concept.key)).length;
-      this.options.journal.set({ url: rows.url, statements: undo });
     } catch (error) {
       // まだ何も書いていない
       return writeFailure(`could not prepare to write: ${messageOf(error)}`, true);
     }
+    try {
+      this.options.journal.set({ url: rows.url, statements: undo });
+    } catch (error) {
+      return writeFailure(`could not prepare to write: ${messageOf(error)}`, true);
+    }
 
-    const statements = [
-      ...(isNew ? [] : buildReclipStatements(rows.url)),
-      ...buildClipStatements(clip),
-    ];
-    for (const statement of statements) {
-      const response = await this.#db.execute(statement);
-      if (!response.ok) return this.#undo(undo, dbError(response));
+    this.#writing = true;
+    try {
+      const statements = [
+        ...(isNew ? [] : buildReclipStatements(rows.url)),
+        ...buildClipStatements(clip),
+      ];
+      for (const statement of statements) {
+        const response = await this.#db.execute(statement);
+        if (!response.ok) return await this.#undo(undo, dbError(response));
+      }
+      let connections: number | null = null;
+      if (addresses) {
+        const response = await this.#db.execute(buildAddressesStatement(addresses));
+        if (!response.ok) return await this.#undo(undo, dbError(response));
+        connections = response.value.stats.relationships_created ?? 0;
+      }
+      this.options.journal.clear();
+      return {
+        ok: true,
+        summary: {
+          url: rows.url,
+          title: clip.title,
+          concepts: rows.concepts.length,
+          newConcepts,
+          claims: rows.claims.length,
+          newPage: isNew,
+          connections,
+        },
+      };
+    } finally {
+      this.#writing = false;
     }
-    let connections: number | null = null;
-    if (addresses) {
-      const response = await this.#db.execute(buildAddressesStatement(addresses));
-      if (!response.ok) return this.#undo(undo, dbError(response));
-      connections = response.value.stats.relationships_created ?? 0;
-    }
-    this.options.journal.clear();
-    return {
-      ok: true,
-      summary: {
-        url: rows.url,
-        title: clip.title,
-        concepts: rows.concepts.length,
-        newConcepts,
-        claims: rows.claims.length,
-        newPage: isNew,
-        connections,
-      },
-    };
   }
 
   async #undo(statements: CypherStatement[], reason: string): Promise<ClipResult> {
@@ -263,6 +274,8 @@ export class ClipPipeline {
   #undoPending(): Promise<boolean> {
     this.#recovery = this.#recovery.then(async () => {
       try {
+        // 書いている最中の記憶の取り消しを流すと、その書き込みと混ざってグラフが壊れる
+        if (this.#writing) return true;
         const pending = this.options.journal.get();
         if (!pending) return true;
         const restored = await runUndo(this.#db, pending.statements);
