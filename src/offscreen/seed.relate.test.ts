@@ -14,13 +14,15 @@ const DEMO_COUNTS = { Page: 15, Concept: 29, Person: 9, Claim: 48, ADDRESSES: 11
 
 /**
  * OPFS と localStorage の代わり。同じ store を開くと前回の中身が残っている。
- * interruptAfter を決めると、次のスクリプトはその数の文だけ流してから trap する
+ * interruptAfter を決めると、次のスクリプトはその数の文だけ流してから trap する。
+ * breakAfter を決めると、次のスクリプトはその次の文で Relate のエラーになる
  */
 type Store = {
   opfs: RelateDb | null;
   refuseOpfs: boolean;
   progress: SeedProgress | null;
   interruptAfter?: number;
+  breakAfter?: number;
 };
 
 function firstStatements(script: string, count: number): string {
@@ -45,6 +47,12 @@ function relateWorker(store: Store, handlers: WorkerHandlers) {
       case "execute":
         return { id, ok: true, value: requireDb().execute(request.query, request.params) };
       case "executeScript": {
+        const broken = store.breakAfter;
+        if (broken !== undefined) {
+          store.breakAfter = undefined;
+          const script = `${firstStatements(request.script, broken)}\nTHIS IS NOT CYPHER;`;
+          return { id, ok: true, value: requireDb().executeScript(script, request.params) };
+        }
         const cut = store.interruptAfter;
         if (cut === undefined) {
           return { id, ok: true, value: requireDb().executeScript(request.script, request.params) };
@@ -163,6 +171,18 @@ describe("seeding on open", () => {
     expect(store.progress).toBe("done");
   });
 
+  it("keeps a seed that failed partway with a Relate error, and the pages added after it", async () => {
+    const store = { ...freshStore(), breakAfter: 20 };
+    const first = connect(store).client;
+    const partial = (await counts(first)).Page as number;
+    expect(partial).toBeLessThan(DEMO_COUNTS.Page);
+    expect(store.progress).toBe("done");
+    await run(first, "CREATE (:Page {url: 'https://example.com/mine'})");
+
+    const { client } = connect(store);
+    expect((await counts(client)).Page).toBe(partial + 1);
+  });
+
   it("does not add the demo data to a store holding only the user's own pages", async () => {
     const store = freshStore();
     store.opfs = openMemoryDb();
@@ -225,6 +245,23 @@ describe("resetToDemo", () => {
 
     expect(await counts(client)).toEqual(DEMO_COUNTS);
     expect(store.progress).toBe("done");
+  });
+
+  it("returns a reset that failed with a Relate error, and keeps later pages on reopen", async () => {
+    const store = freshStore();
+    const first = connect(store).client;
+    expect(await counts(first)).toEqual(DEMO_COUNTS);
+    store.breakAfter = 30;
+    expect(await first.request({ kind: "resetToDemo" })).toMatchObject({
+      ok: false,
+      error: { kind: "relate" },
+    });
+    expect(store.progress).toBe("done");
+    await run(first, "CREATE (:Page {url: 'https://example.com/mine'})");
+    const before = await counts(first);
+
+    const { client } = connect(store);
+    expect(await counts(client)).toEqual(before);
   });
 
   it("fails without touching the graph when no demo data is bundled", async () => {

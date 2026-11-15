@@ -133,12 +133,14 @@ export class DbClient {
         : undefined;
     progress?.set("pending");
     const outcome = await this.call(op);
+    // 最後まで流れたなら、Relate のエラーで途中までしか入らなくても pending にしない。
+    // 残すと次に開くたびに消して入れ直し、その間に記憶したページも消える。直すのは利用者の Reset に任せる
+    if (!isLost(outcome)) progress?.set("done");
     if (outcome.kind === "response" && outcome.response.ok) {
       try {
         const value = outcome.response.value ?? [];
         const jsons = typeof value === "string" ? [value] : value;
         const result = typeof value === "string" ? classifyExecute(value) : classifyScript(jsons);
-        if (result.ok) progress?.set("done");
         job.resolve(result);
         if (changedGraph(jsons)) this.notify({ type: "graphChanged" });
       } catch (error) {
@@ -236,8 +238,9 @@ export class DbClient {
     const script = plan === "finish" ? resetScript(seed) : seed;
     const seeded = await this.call({ op: "executeScript", script, params: null });
     if (isLost(seeded)) return this.lostWhileOpening(seeded);
-    // Relate のエラーで途中までしか入らなくても DB は使えるので開けたことにし、pending のまま次に開くときに入れ直す
-    if (scriptSucceeded(seeded)) progress?.set("done");
+    // Relate のエラーで途中までしか入らなくても DB は使えるので開けたことにする。
+    // pending のままにすると次に開くたびに消して入れ直すので、直すのは利用者の Reset に任せる
+    progress?.set("done");
     this.notify({ type: "graphChanged" });
     return null;
   }
@@ -332,18 +335,6 @@ function toWorkerOp(request: DbOp, seed: string | undefined): WorkerOp {
 /** 時間切れ・trap・worker が落ちた、のどれか。worker は作り直すしかない */
 function isLost(outcome: Outcome): boolean {
   return outcome.kind !== "response" || (!outcome.response.ok && outcome.response.trap);
-}
-
-/** 投入のスクリプトがすべての文で成功したか */
-function scriptSucceeded(outcome: Outcome): boolean {
-  if (outcome.kind !== "response" || !outcome.response.ok) return false;
-  const { value } = outcome.response;
-  if (!Array.isArray(value)) return false;
-  try {
-    return classifyScript(value).ok;
-  } catch {
-    return false;
-  }
 }
 
 function classifyCheck(outcome: Outcome): DbResponse<RelateResult> {
