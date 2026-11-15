@@ -42,7 +42,14 @@ export async function createSession(
   options: LanguageModelCreateOptions = {},
 ): Promise<LanguageModelSession> {
   const api = languageModel();
-  if (!api) throw new Error("LanguageModel がこのページにありません");
+  if (!api) throw new Error("LanguageModel unavailable: このページに LanguageModel がありません");
+  // downloadable・downloading では create がダウンロードを始めるので通す。unavailable だけ先に止める
+  const availability = await api.availability(LANGUAGES);
+  if (availability === "unavailable") {
+    throw new Error(
+      "LanguageModel unavailable: availability が unavailable（chrome://on-device-internals を確認）",
+    );
+  }
   return api.create({ ...LANGUAGES, ...options });
 }
 
