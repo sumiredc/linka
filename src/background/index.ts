@@ -7,7 +7,14 @@ import {
   isFromExtensionPage,
   isMessageFor,
 } from "../shared/messages";
-import { type Badge, createBadgeRefresher, refreshesOnUpdate, tabsShowing } from "./badge";
+import {
+  type Badge,
+  badgeTriggerOf,
+  createBadgeRefresher,
+  debounce,
+  refreshesOnUpdate,
+  tabsShowing,
+} from "./badge";
 import { createOffscreenEnsurer } from "./offscreen";
 
 const EXTENSION_ROOT = chrome.runtime.getURL("");
@@ -77,19 +84,27 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (refreshesOnUpdate(changeInfo)) void refreshBadge(tabId, tab.url);
 });
 
-// offscreen document が拡張機能のすべてのページへ送る記憶の結果は、service worker にも届く
-chrome.runtime.onMessage.addListener((message: unknown, sender) => {
-  if (!isMessageFor(message, "ui") || message.type !== "clip") return false;
-  if (message.event.kind !== "finished") return false;
-  if (!isFromExtensionPage(sender, EXTENSION_ROOT)) return false;
-  const pageUrl = message.event.target.url;
+function refreshTabs(pageUrl: string | null): void {
   chrome.tabs.query({}).then(
     (tabs) => {
-      for (const tab of tabsShowing(tabs, pageUrl, EXTENSION_ROOT)) {
-        void refreshBadge(tab.id, tab.url);
-      }
+      const targets =
+        pageUrl === null
+          ? tabs.flatMap(({ id, url }) => (id === undefined ? [] : [{ id, url }]))
+          : tabsShowing(tabs, pageUrl, EXTENSION_ROOT);
+      for (const tab of targets) void refreshBadge(tab.id, tab.url);
     },
     () => {},
   );
+}
+
+const GRAPH_CHANGED_DEBOUNCE_MS = 500;
+const refreshAllTabs = debounce(() => refreshTabs(null), GRAPH_CHANGED_DEBOUNCE_MS);
+
+// offscreen document が拡張機能のすべてのページへ送る通知は、service worker にも届く
+chrome.runtime.onMessage.addListener((message: unknown, sender) => {
+  const trigger = badgeTriggerOf(message);
+  if (trigger === null || !isFromExtensionPage(sender, EXTENSION_ROOT)) return false;
+  if (trigger.kind === "page") refreshTabs(trigger.url);
+  else refreshAllTabs();
   return false;
 });
