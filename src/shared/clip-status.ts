@@ -53,7 +53,13 @@ export type ConnectionsOutcome =
    * Nano が使えない・判定が失敗した・時間切れなどで、つながりを判定しなかった。
    * ADDRESSES は張っておらず、UC1 で入れた内容はそのまま残っている
    */
-  | { kind: "notJudged"; reason: string };
+  | { kind: "notJudged"; reason: string }
+  /**
+   * ADDRESSES を書いたが、何が残ったかを確かめられなかった（書いたあとで読めなかった、
+   * UC2 の書き込みの失敗のあと張りかけた分を消しきれなかった）。残りうるのは、解決すると判断された組だけ。
+   * UC1 で入れた内容はそのまま残っている
+   */
+  | { kind: "unconfirmed"; reason: string };
 
 export type ClipFailureKind =
   /** URL を解釈できない */
