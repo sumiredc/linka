@@ -1,5 +1,6 @@
 // 画面・service worker・offscreen document の間で chrome.runtime を通して送るメッセージ。
 // 長い依頼が service worker の休止で返事を失わないよう、DB への依頼と通知は service worker を通さない
+import type { ModelStatus } from "./model-status";
 
 export type CypherParams = Record<string, unknown>;
 
@@ -50,13 +51,23 @@ export type DbNotification =
   | { type: "graphChanged" }
   | { type: "storageChanged"; storage: StorageState };
 
+/** Gemini Nano のモデルへの依頼。返事はどちらも依頼を受けた時点の `ModelStatus` */
+export type ModelRequest =
+  | { kind: "status" }
+  /** モデルが入っていなければダウンロードを始める。終わるのを待たずに返事をし、進み具合は通知する */
+  | { kind: "download" };
+
 export type RuntimeMessage =
   /** service worker に offscreen document を用意させる。返事は `EnsureResponse` */
   | { target: "background"; type: "ensureOffscreen" }
   /** 返事は `DbResponse` */
   | { target: "offscreen"; type: "db"; request: DbRequest }
+  /** 返事は `DbResponse<ModelStatus>` */
+  | { target: "offscreen"; type: "model"; request: ModelRequest }
   /** offscreen document から拡張機能のすべてのページへ */
-  | { target: "ui"; type: "notify"; notification: DbNotification };
+  | { target: "ui"; type: "notify"; notification: DbNotification }
+  /** offscreen document から拡張機能のすべてのページへ。モデルの状態やダウンロードの進み具合が変わった */
+  | { target: "ui"; type: "model"; status: ModelStatus };
 
 export type EnsureResponse = { ok: true } | DbFailure;
 

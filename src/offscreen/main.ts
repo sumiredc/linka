@@ -6,7 +6,9 @@ import {
   isMessageFor,
   type RuntimeMessage,
 } from "../shared/messages";
+import { languageModel } from "../shared/prompt-api";
 import { DbClient } from "./db-client";
+import { ModelTracker } from "./model-tracker";
 import type { WorkerResponse } from "./worker-protocol";
 
 // execute は止められないので、これを超えたら worker ごと作り直す
@@ -35,15 +37,27 @@ const client = new DbClient({
   },
 });
 
+const model = new ModelTracker({
+  api: languageModel,
+  onChange: (status) => {
+    const message: RuntimeMessage = { target: "ui", type: "model", status };
+    chrome.runtime.sendMessage(message).catch(() => {});
+  },
+});
+
 chrome.runtime.onMessage.addListener(
   (message: unknown, sender, sendResponse: (response: DbResponse) => void) => {
     if (!isMessageFor(message, "offscreen")) return false;
     if (!isFromExtensionPage(sender, chrome.runtime.getURL(""))) return false;
-    client
-      .request(message.request)
-      .then(sendResponse, (error: unknown) =>
-        sendResponse(failure("exception", error instanceof Error ? error.message : String(error))),
-      );
+    const response =
+      message.type === "model"
+        ? (message.request.kind === "download" ? model.download() : model.status()).then(
+            (value): DbResponse => ({ ok: true, value }),
+          )
+        : client.request(message.request);
+    response.then(sendResponse, (error: unknown) =>
+      sendResponse(failure("exception", error instanceof Error ? error.message : String(error))),
+    );
     return true;
   },
 );
