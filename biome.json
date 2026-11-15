@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!spikes", "!**/*.md"]
+    "includes": ["**", "!**/*.md"]
   },
   "formatter": {
     "enabled": true,
