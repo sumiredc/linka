@@ -16,6 +16,11 @@ const OUTCOME_LABELS: Record<QuestionRun["outcome"], string> = {
   write: "書き込みで拒否",
 };
 
+/** 答えの Cypher の行数（ページのスレッドの Relate で seed が入ったことの確認にもなる） */
+function referenceLine(rows: readonly (unknown[] | null)[]): string {
+  return `答えの Cypher の行数: ${QUESTIONS.map((question, index) => `${question.id}=${rows[index]?.length ?? "-"}`).join(" ")}`;
+}
+
 function preview(rows: unknown[] | null, limit = 3): string {
   if (rows === null) return "-";
   const head = rows.slice(0, limit).map((row) => JSON.stringify(row));
@@ -43,6 +48,7 @@ export function CypherCheck({ onReport }: { onReport: (text: string) => void }) 
     nextMarks: Mark[],
     env: string,
     conceptNames: boolean,
+    references: readonly (unknown[] | null)[],
   ) => {
     const summary = summarize(
       nextRuns,
@@ -53,6 +59,7 @@ export function CypherCheck({ onReport }: { onReport: (text: string) => void }) 
       "",
       "```text",
       env,
+      referenceLine(references),
       `プロンプトに概念名の一覧を入れる: ${conceptNames ? "はい" : "いいえ"}`,
       `1 回目で実行できた: ${summary.first}/${summary.total}`,
       `作り直し（最大 2 回）までに実行できた: ${summary.withinRetries}/${summary.total}（うち 0 行: ${summary.empty}）`,
@@ -89,10 +96,11 @@ export function CypherCheck({ onReport }: { onReport: (text: string) => void }) 
   const runAll = async () => {
     const db = new DemoDb();
     let env = "";
+    let referenceRows: (unknown[] | null)[] = QUESTIONS.map(() => null);
     try {
       setStatus("Relate を開いて seed/demo.cypher を入れています");
       await db.open();
-      const referenceRows = await Promise.all(
+      referenceRows = await Promise.all(
         QUESTIONS.map(async (question) => {
           const result = await db.execute(question.reference);
           return result.ok ? result.rows : [`答えの Cypher がエラー: ${result.error}`];
@@ -135,10 +143,20 @@ export function CypherCheck({ onReport }: { onReport: (text: string) => void }) 
       }
       base.destroy();
       setStatus("完了。答えの正誤を付けると結果の文に反映されます");
-      report(nextRuns, marks, env, withConceptNames);
+      report(nextRuns, marks, env, withConceptNames, referenceRows);
     } catch (error) {
       setStatus(`中断: ${errorText(error)}`);
-      onReport(`## 2. Nano が書く Cypher\n\n中断: ${errorText(error)}\n${env}`);
+      onReport(
+        [
+          "## 2. Nano が書く Cypher",
+          "",
+          "```text",
+          env,
+          referenceLine(referenceRows),
+          `中断: ${errorText(error)}`,
+          "```",
+        ].join("\n"),
+      );
     }
   };
 
@@ -204,7 +222,8 @@ export function CypherCheck({ onReport }: { onReport: (text: string) => void }) 
                       const next = [...marks];
                       next[index] = event.target.value as Mark;
                       setMarks(next);
-                      if (runs.some(Boolean)) report(runs, next, environment, ranWithConceptNames);
+                      if (runs.some(Boolean))
+                        report(runs, next, environment, ranWithConceptNames, references);
                     }}
                   >
                     <option value="unjudged">未判定</option>
