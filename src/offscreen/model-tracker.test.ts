@@ -99,4 +99,23 @@ describe("ModelTracker", () => {
     await tracker.status();
     expect(changes).toHaveLength(1);
   });
+
+  it("does not let a status read that started before the download overwrite it", async () => {
+    // availability の答えを手で順に返す。create は終わらない
+    const pending: ((state: string) => void)[] = [];
+    const api: LanguageModelStatic = {
+      availability: () => new Promise((resolve) => pending.push(resolve)),
+      create: () => new Promise(() => {}),
+    };
+    const changes: ModelStatus[] = [];
+    const tracker = new ModelTracker({ api: () => api, onChange: (s) => changes.push(s) });
+    const slow = tracker.status();
+    const download = tracker.download();
+    await flush();
+    pending[1]?.("downloadable");
+    expect(await download).toEqual({ kind: "downloading", progress: 0 });
+    pending[0]?.("downloadable");
+    expect(await slow).toEqual({ kind: "downloading", progress: 0 });
+    expect(changes.at(-1)).toEqual({ kind: "downloading", progress: 0 });
+  });
 });

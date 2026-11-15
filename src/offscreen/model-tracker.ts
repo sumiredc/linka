@@ -20,7 +20,10 @@ export class ModelTracker {
   async status(): Promise<ModelStatus> {
     // ダウンロード中は availability より、進み具合を知っている手元の状態のほうが詳しい
     if (this.#downloading && this.#last) return this.#last;
-    return this.#set(await readModelStatus(this.options.api()));
+    const status = await readModelStatus(this.options.api());
+    // 読んでいる間にダウンロードが始まったなら、古い状態で上書きしない
+    if (this.#downloading && this.#last) return this.#last;
+    return this.#set(status);
   }
 
   /** モデルが入っていなければダウンロードを始め、終わるのを待たずに今の状態を返す */
