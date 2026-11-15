@@ -1,4 +1,4 @@
-/* mock/styles.css の .action-popup と、サイドパネルのボタン・お知らせの見た目 */
+/* 吹き出しの見た目。ボタンとお知らせはサイドパネルと揃える */
 .popup {
   width: 320px;
   padding: 12px 16px 14px;

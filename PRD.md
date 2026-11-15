@@ -296,7 +296,7 @@ flowchart LR
 | `.rl` の作成と MCP | Relate CLI | 1.0.1（拡張機能の Wasm と同じ版） | `data/linka.rl` の作成と、UC4 の MCP 接続に使う。公式のインストーラ（`curl -sSfL https://relatedb.ai/install.sh \| bash`）が、署名と checksum を確かめてから `~/.local/bin/relate` に入れる。sudo は要らない。インストーラは常に最新版を入れるので、版を固定したいときは GitHub の Release `v1.0.1` から `relate-darwin-arm64` などを直接取る。CLI は初期設定で利用状況を送信するので、README では `DO_NOT_TRACK=1` か `relate telemetry off` を案内する | macOS（arm64）で `npm run store`、`relate serve --mcp stdio`、Claude Code と Codex からの問い合わせ |
 | ライセンス | MIT | — | ハッカソンの推奨 | — |
 
-リポジトリの構成は 1 つのパッケージとし、`src/` の下を動く場所ごとに分ける：`background/`（service worker）、`offscreen/`（DB と AI）、`popup/`、`sidepanel/`、`content/`（ページの読み取り）、`shared/`（メッセージの型とスキーマ）。デモデータは `seed/`、同梱するストアは `data/` に置く。`mock/` と `spikes/` は参考として残す。
+リポジトリの構成は 1 つのパッケージとし、`src/` の下を動く場所ごとに分ける：`background/`（service worker）、`offscreen/`（DB と AI）、`popup/`、`sidepanel/`、`content/`（ページの読み取り）、`shared/`（メッセージの型とスキーマ）。デモデータは `seed/`、同梱するストアは `data/` に置く。`spikes/` は参考として残す。
 
 ---
 

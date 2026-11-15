@@ -254,7 +254,7 @@ npm run build       # dist/
 npm run dev         # rebuild dist/ on change; reload the extension on chrome://extensions
 ```
 
-The source is under `src/`, one folder per place it runs: `background/` (service worker), `offscreen/` (the Relate database and Gemini Nano), `popup/`, `sidepanel/`, `content/` (reads the page) and `shared/`. `spikes/` and `mock/` are feasibility checks and the UI mock, kept for reference and not part of the build.
+The source is under `src/`, one folder per place it runs: `background/` (service worker), `offscreen/` (the Relate database and Gemini Nano), `popup/`, `sidepanel/`, `content/` (reads the page) and `shared/`. `spikes/` holds the feasibility checks, kept for reference and not part of the build.
 
 ### Manual checks on `dev.html`
 
