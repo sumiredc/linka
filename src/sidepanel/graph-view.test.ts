@@ -173,9 +173,35 @@ describe("toGraphView", () => {
     expect(linkIds(view)).toEqual([`page:${A}|ASSERTS|claim:s1`, `page:${A}|MENTIONS|concept:a`]);
   });
 
-  it("drops a claim's link to a page that is not drawn", () => {
-    const view = toGraphView(results({ pages: [page(A)], claims: [claim(B, "c1", "fact")] }));
-    expect(linkIds(view)).toEqual([]);
+  it("drops a claim whose page is not drawn, with its links", () => {
+    const view = toGraphView(
+      results({
+        pages: [page(A)],
+        claims: [claim(B, "c1", "fact")],
+        mentions: [{ page: A, ...concept("a") }],
+        about: [{ claim: "c1", ...concept("a") }],
+      }),
+    );
+    expect(view.nodes.map((node) => node.id)).toEqual([`page:${A}`, "concept:a"]);
+    expect(linkIds(view)).toEqual([`page:${A}|MENTIONS|concept:a`]);
+  });
+
+  it("drops a concept left without any drawn link", () => {
+    // B の Claim だけが指していた Concept は、B を描かないとどこにもつながらない
+    const view = toGraphView(
+      results({
+        pages: [page(A)],
+        claims: [claim(B, "c1", "fact")],
+        about: [{ claim: "c1", ...concept("only-on-b") }],
+      }),
+    );
+    expect(view.nodes.map((node) => node.id)).toEqual([`page:${A}`]);
+  });
+
+  it("keeps a page that has no links", () => {
+    expect(toGraphView(results({ pages: [page(A)] })).nodes.map((node) => node.id)).toEqual([
+      `page:${A}`,
+    ]);
   });
 
   it("links a solution to the concern it addresses", () => {

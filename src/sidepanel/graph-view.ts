@@ -124,7 +124,8 @@ export function toGraphView(results: readonly { rows: Rows }[]): GraphView {
   for (const row of rowsAt(2)) {
     const id = text(row, "id");
     const page = text(row, "page");
-    if (id === null || page === null) continue;
+    // 描かないページの Claim は描かない
+    if (id === null || page === null || !nodes.has(pageNodeId(page))) continue;
     const type = text(row, "type") ?? "";
     addNode({
       id: claimNodeId(id),
@@ -161,9 +162,15 @@ export function toGraphView(results: readonly { rows: Rows }[]): GraphView {
     if (!links.has(id)) links.set(id, { id, ...link });
   }
 
-  const pageCount = [...nodes.values()].filter((node) => node.kind === "page").length;
+  // 描かない Claim だけが指していた Concept は、どこにもつながらずに浮くので描かない
+  const linked = new Set([...links.values()].flatMap((link) => [link.source, link.target]));
+  const drawn = [...nodes.values()].filter(
+    (node) => node.kind !== "concept" || linked.has(node.id),
+  );
+
+  const pageCount = drawn.filter((node) => node.kind === "page").length;
   return {
-    nodes: [...nodes.values()],
+    nodes: drawn,
     links: [...links.values()],
     totalPages: typeof totalPages === "number" ? totalPages : pageCount,
   };
