@@ -24,22 +24,9 @@ const STRICT_JUDGE_INSTRUCTIONS = [
   "If you are not sure, answer addresses: false.",
 ].join("\n");
 
-/**
- * 答える前に、懸念の問題と、解決策の文が示す手立てを 1 文ずつ書かせる版（#47）。
- * strict でも、技術の性質を述べただけの文を手立てとみなす誤りが残ったため
- */
-const REASONED_JUDGE_INSTRUCTIONS = [
-  "You decide whether a solution taken from one web page about software development addresses a concern taken from another page.",
-  "First write problem: the specific problem, risk or limitation that the concern states, in one short sentence.",
-  "Then write remedy: the action or mechanism named in the solution statement that removes or reduces exactly that problem, in one short sentence. Write none if the solution statement does not name one.",
-  "A fact about what a technology is or can do is not a remedy unless it removes that exact problem. A shared technology or topic is not a remedy. A fix for a different problem, even a related one, is not a remedy.",
-  "Then answer addresses: true only if remedy is not none.",
-].join("\n");
-
 export const JUDGE_INSTRUCTION_VARIANTS = {
   current: CURRENT_JUDGE_INSTRUCTIONS,
   strict: STRICT_JUDGE_INSTRUCTIONS,
-  reasoned: REASONED_JUDGE_INSTRUCTIONS,
 } as const;
 
 export type JudgeInstructionVariant = keyof typeof JUDGE_INSTRUCTION_VARIANTS;
@@ -60,21 +47,7 @@ export const JUDGE_TIMEOUT_MS = 30_000;
 
 export const JudgementSchema = z.object({ addresses: z.boolean() });
 
-/** reasoned の版の答え。モデルは項目を順に書くので、addresses を最後に置き、先に書いた 2 文を踏まえて答えさせる */
-export const ReasonedJudgementSchema = z.object({
-  problem: z.string().max(200),
-  remedy: z.string().max(200),
-  addresses: z.boolean(),
-});
-
-/** 版ごとの responseConstraint。どの版の答えも parseJudgement で addresses だけを読む */
-export const JUDGE_RESPONSE_CONSTRAINTS: Record<JudgeInstructionVariant, object> = {
-  current: z.toJSONSchema(JudgementSchema),
-  strict: z.toJSONSchema(JudgementSchema),
-  reasoned: z.toJSONSchema(ReasonedJudgementSchema),
-};
-
-const RESPONSE_CONSTRAINT = JUDGE_RESPONSE_CONSTRAINTS[PRODUCTION_JUDGE_VARIANT];
+const RESPONSE_CONSTRAINT = z.toJSONSchema(JudgementSchema);
 
 export type JudgeFailureKind =
   /** この環境では Nano が使えない、またはモデルがまだ入っていない */
@@ -146,12 +119,11 @@ export async function openJudgeSession(
   }
 }
 
-/** 1 組を判定する。`responseConstraint` は指示の版に合わせる（JUDGE_RESPONSE_CONSTRAINTS）。抽出と同じく 1 回ごとに base を clone し、出力の形が違うときだけ 1 回やり直す */
+/** 1 組を判定する。抽出と同じく 1 回ごとに base を clone し、出力の形が違うときだけ 1 回やり直す */
 export async function judgePair(
   base: LanguageModelSession,
   candidate: AddressesCandidate,
   timeoutMs: number = JUDGE_TIMEOUT_MS,
-  responseConstraint: object = RESPONSE_CONSTRAINT,
 ): Promise<PairResult> {
   const input = judgePrompt(candidate);
   for (let attempt = 1; attempt <= 2; attempt++) {
@@ -160,7 +132,7 @@ export async function judgePair(
     try {
       session = await base.clone();
       raw = await promptWithTimeout(session, input, {
-        responseConstraint,
+        responseConstraint: RESPONSE_CONSTRAINT,
         timeoutMs,
       });
     } catch (error) {
