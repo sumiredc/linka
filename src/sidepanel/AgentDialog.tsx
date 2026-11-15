@@ -5,6 +5,8 @@ import styles from "./AgentDialog.module.css";
 import {
   AGENT_PROMPT,
   BUILD_STORE_COMMAND,
+  BUILD_STORE_FROM_LINKA_COMMAND,
+  CHECK_STORE_COMMAND,
   CLAUDE_CODE_COMMAND,
   CODEX_COMMAND,
   DIRECT_QUERY_COMMAND,
@@ -235,10 +237,24 @@ export function AgentDialog({
             is used too. If your browser saves downloads elsewhere, change that path.
           </span>
           <Command text={BUILD_STORE_COMMAND} />
+          <p className={styles.note}>
+            If it says <code>Operation not permitted</code>, your terminal can't read{" "}
+            <code>~/Downloads</code>. Either allow it in System Settings → Privacy &amp; Security →
+            Files and Folders → Downloads (or Full Disk Access) and restart the terminal, or move
+            the file to <code>~/linka/{EXPORT_FILE_NAME}</code> in Finder and run:
+          </p>
+          <Command text={BUILD_STORE_FROM_LINKA_COMMAND} />
         </li>
         <li>
-          <span>Register it as a read-only MCP server.</span>
+          <span>
+            Register it as a read-only MCP server. Do this after step 1 succeeds; otherwise the
+            server fails to start.
+          </span>
           <AgentTabs />
+          <p className={styles.note}>
+            If <code>/mcp</code> shows linka as failed, check that{" "}
+            <code>{CHECK_STORE_COMMAND}</code> lists the file. If not, run step 1.
+          </p>
         </li>
         <li>
           <span>Ask your agent.</span>
