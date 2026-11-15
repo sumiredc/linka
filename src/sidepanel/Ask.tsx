@@ -11,7 +11,13 @@ import {
 import type { DbResponse } from "../shared/messages";
 import type { ModelStatus } from "../shared/model-status";
 import styles from "./Ask.module.css";
-import { answerCells, answerHighlight, type Highlight } from "./answer-view";
+import {
+  answerCells,
+  answerHighlight,
+  BUSY_TEXT,
+  type Highlight,
+  unanswerableText,
+} from "./answer-view";
 import { askGate, shouldSubmit } from "./ask-input";
 
 export type AskState =
@@ -150,23 +156,21 @@ function Cypher({ text, label }: { text: string; label: string }) {
   );
 }
 
-const UNANSWERABLE_TEXT = {
-  noKind: "Linka cannot turn this question into one of the queries it knows. Nothing was run.",
-  emptyGraph: "The graph has no pages yet. Clip a page first.",
-  tooLong: `Questions can be up to ${QUESTION_MAX_LENGTH} characters.`,
-} as const;
-
 function Unanswerable({ result }: { result: Extract<AskResult, { kind: "unanswerable" }> }) {
-  const text =
-    result.reason === "unknownTarget"
-      ? result.missing.length > 0
-        ? `${result.missing.map((name) => `“${name}”`).join(" and ")} ${result.missing.length === 1 ? "is" : "are"} not in the graph. Nothing was run.`
-        : "Linka could not tell which concept or page the question is about. Nothing was run."
-      : UNANSWERABLE_TEXT[result.reason];
+  const text = unanswerableText(result);
   const guide = result.reason === "noKind" || result.reason === "unknownTarget";
   return (
     <>
       <p className={`${styles.notice} ${styles.warn}`}>{text}</p>
+      {result.reason === "ambiguous" && (
+        <ul className={styles.examples}>
+          {result.matches.map((page) => (
+            <li key={page.url}>
+              {page.title} <span className={styles.label}>{page.url}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       {guide && (
         <>
           <p className={styles.muted}>
@@ -240,6 +244,8 @@ function Result({ response }: { response: DbResponse<AskResult> }) {
       return <Answer result={result} />;
     case "unanswerable":
       return <Unanswerable result={result} />;
+    case "busy":
+      return <p className={`${styles.notice} ${styles.warn}`}>{BUSY_TEXT}</p>;
     case "failed":
       return (
         <>
@@ -266,7 +272,10 @@ export function AnswerView({ state, onClear }: { state: AskState; onClear(): voi
       {title !== state.question && <p className={styles.question}>You asked: {state.question}</p>}
       {state.kind === "asking" ? (
         <p className={styles.muted} role="status">
-          Choosing a query for your question…
+          Choosing a query for your question…{" "}
+          <button type="button" className={styles.linkish} onClick={onClear}>
+            Cancel
+          </button>
         </p>
       ) : (
         <>

@@ -22,3 +22,17 @@ describe("askGraph", () => {
     ]);
   });
 });
+
+describe("askGraph without an answer", () => {
+  it("fails after its own timeout so the panel can ask again", async () => {
+    const askGraph = createAskGraph(
+      (message) =>
+        message.target === "background" ? Promise.resolve({ ok: true }) : new Promise(() => {}),
+      20,
+    );
+    expect(await askGraph("Which pages mention OPFS?")).toEqual({
+      ok: false,
+      error: { kind: "timeout", message: "no answer within 0.02 s" },
+    });
+  });
+});

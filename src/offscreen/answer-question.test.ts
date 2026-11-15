@@ -14,7 +14,14 @@ import type {
   LanguageModelStatic,
   PromptOptions,
 } from "../shared/prompt-api";
-import { GraphQuestions, QUESTION_INSTRUCTIONS, questionPrompt } from "./answer-question";
+import {
+  CONCEPT_NAME_MAX_CHARS,
+  GraphQuestions,
+  PROMPT_CHAR_BUDGET,
+  QUESTION_INSTRUCTIONS,
+  questionPrompt,
+  TITLE_MAX_CHARS,
+} from "./answer-question";
 
 type Answer = string | Error | "hang";
 
@@ -25,24 +32,43 @@ class FakeModel implements LanguageModelStatic {
   clones = 0;
   destroyed = 0;
   basesDestroyed = 0;
+  /** この段階で答えない（期限の確かめ） */
+  hang: "availability" | "create" | "clone" | null = null;
+  /** 指定すると、base のセッションが入力の上限とトークン数の測定を持つ（1 文字 1 トークンと数える） */
+  quota: number | null = null;
+  readonly measured: number[] = [];
 
   constructor(
     private readonly answers: Answer[],
     public state = "available",
   ) {}
 
-  async availability() {
-    return this.state;
+  availability() {
+    if (this.hang === "availability") return new Promise<string>(() => {});
+    return Promise.resolve(this.state);
   }
 
-  async create(): Promise<LanguageModelSession> {
+  create(): Promise<LanguageModelSession> {
     this.creates++;
-    return this.session(true);
+    if (this.hang === "create") return new Promise<LanguageModelSession>(() => {});
+    return Promise.resolve(this.session(true));
   }
 
   private session(isBase: boolean): LanguageModelSession {
     let used = false;
+    const measuring =
+      isBase && this.quota !== null
+        ? {
+            inputQuota: this.quota,
+            inputUsage: 100,
+            measureInputUsage: async (input: string) => {
+              this.measured.push(input.length);
+              return input.length;
+            },
+          }
+        : {};
     return {
+      ...measuring,
       prompt: (input, options) => {
         if (isBase) return Promise.reject(new Error("the base session must not be prompted"));
         if (used) return Promise.reject(new Error("kErrorUnknown"));
@@ -54,9 +80,10 @@ class FakeModel implements LanguageModelStatic {
         if (answer instanceof Error) return Promise.reject(answer);
         return Promise.resolve(answer);
       },
-      clone: async () => {
+      clone: () => {
         this.clones++;
-        return this.session(false);
+        if (this.hang === "clone") return new Promise<LanguageModelSession>(() => {});
+        return Promise.resolve(this.session(false));
       },
       destroy: () => {
         if (isBase) this.basesDestroyed++;
@@ -71,6 +98,22 @@ const CONCEPT_ROWS = [
   { key: "webworker", name: "Web Worker" },
 ];
 const PAGE_ROWS = [{ url: "https://example.com/opfs", title: "Origin private file system" }];
+/** グラフにはあるが、候補の上限でプロンプトに入らなかった概念 */
+const RARE_CONCEPT = { key: "rarething", name: "Rare thing" };
+
+const isLookup = (statement: CypherStatement) =>
+  statement.query.includes("IN $keys") || statement.query.includes("CONTAINS $text");
+
+/** 対象を探す文に、グラフ（候補より多い）から当てはまる行を返す */
+function lookupRows(statement: CypherStatement, pages: typeof PAGE_ROWS) {
+  const params = statement.params as { keys?: string[]; names?: string[]; text?: string };
+  if (params.keys) {
+    return [...CONCEPT_ROWS, RARE_CONCEPT].filter(
+      (row) => params.keys?.includes(row.key) || params.names?.includes(row.name.toLowerCase()),
+    );
+  }
+  return pages.filter((row) => row.title.toLowerCase().includes(params.text ?? ""));
+}
 
 const ok = (rows: Record<string, unknown>[]): DbResponse<RelateResult> => ({
   ok: true,
@@ -89,6 +132,7 @@ function fakeDb(
       executed.push(statement);
       if (statement === CANDIDATE_QUERIES.concepts) return ok(CONCEPT_ROWS);
       if (statement === CANDIDATE_QUERIES.pages) return ok(pages);
+      if (isLookup(statement)) return ok(lookupRows(statement, pages));
       return answer;
     },
   };
@@ -97,9 +141,14 @@ function fakeDb(
 const choice = (fields: Partial<QuestionChoice>) =>
   JSON.stringify({ kind: "none", concepts: [], page: "", moreThan: 0, ...fields });
 
-function setup(answers: Answer[], db = fakeDb(), timeoutMs?: number) {
+function setup(answers: Answer[], db = fakeDb(), timeoutMs?: number, clipping = false) {
   const model = new FakeModel(answers);
-  const questions = new GraphQuestions({ api: () => model, execute: db.execute, timeoutMs });
+  const questions = new GraphQuestions({
+    api: () => model,
+    execute: db.execute,
+    clipping: () => clipping,
+    timeoutMs,
+  });
   return { model, db, questions };
 }
 
@@ -107,7 +156,9 @@ function setup(answers: Answer[], db = fakeDb(), timeoutMs?: number) {
 const asked = (db: ReturnType<typeof fakeDb>) =>
   db.executed.filter(
     (statement) =>
-      statement !== CANDIDATE_QUERIES.concepts && statement !== CANDIDATE_QUERIES.pages,
+      statement !== CANDIDATE_QUERIES.concepts &&
+      statement !== CANDIDATE_QUERIES.pages &&
+      !isLookup(statement),
   );
 
 describe("GraphQuestions.ask", () => {
@@ -173,6 +224,7 @@ describe("GraphQuestions.ask", () => {
         kind: "unanswerable",
         reason: "noKind",
         missing: [],
+        matches: [],
         concepts: ["OPFS", "Web Worker"],
       },
     });
@@ -228,7 +280,11 @@ describe("GraphQuestions.ask", () => {
 
   it("fails at the model stage when there is no Prompt API", async () => {
     const db = fakeDb();
-    const questions = new GraphQuestions({ api: () => null, execute: db.execute });
+    const questions = new GraphQuestions({
+      api: () => null,
+      execute: db.execute,
+      clipping: () => false,
+    });
     const response = await questions.ask("How many claims of each type are there?");
     expect(response).toMatchObject({ ok: true, value: { kind: "failed", stage: "model" } });
   });
@@ -321,11 +377,163 @@ describe("GraphQuestions.ask", () => {
   it("passes on a failure to read the candidate names", async () => {
     const questions = new GraphQuestions({
       api: () => new FakeModel([]),
+      clipping: () => false,
       execute: async () => failure("unavailable", "the graph cannot be opened"),
     });
     expect(await questions.ask("Which pages mention OPFS?")).toEqual(
       failure("unavailable", "the graph cannot be opened"),
     );
+  });
+});
+
+describe("GraphQuestions.ask while clipping", () => {
+  it("turns the question away without reading the graph or prompting", async () => {
+    const { questions, db, model } = setup(
+      [choice({ kind: "claimCountsByType" })],
+      fakeDb(),
+      undefined,
+      true,
+    );
+    expect(await questions.ask("How many claims of each type are there?")).toEqual({
+      ok: true,
+      value: { kind: "busy" },
+    });
+    expect(db.executed).toEqual([]);
+    expect(model.prompts).toEqual([]);
+  });
+});
+
+describe("GraphQuestions.ask targets", () => {
+  it("finds a concept in the graph that was not among the prompt's candidates", async () => {
+    const { questions, db } = setup([
+      choice({ kind: "pagesMentioning", concepts: ["rare thing"] }),
+    ]);
+    const response = await questions.ask("Which pages mention Rare thing?");
+    expect(response).toMatchObject({ ok: true, value: { kind: "answer" } });
+    expect(asked(db)[0]?.params).toMatchObject({ concept: "rarething" });
+  });
+
+  it("lists the matching pages and runs nothing when the page is ambiguous", async () => {
+    const pages = [
+      { url: "https://a.example/", title: "Origin private file system" },
+      { url: "https://b.example/", title: "Origin private file system" },
+    ];
+    const { questions, db } = setup(
+      [choice({ kind: "pagesSolvingConcernsOfPage", page: "Origin private file system" })],
+      fakeDb(undefined, pages),
+    );
+    const response = await questions.ask("Which pages solve the concerns on the OPFS page?");
+    expect(response).toMatchObject({
+      ok: true,
+      value: { kind: "unanswerable", reason: "ambiguous", matches: pages },
+    });
+    expect(asked(db)).toEqual([]);
+  });
+});
+
+describe("GraphQuestions.ask deadline", () => {
+  for (const step of ["availability", "create", "clone"] as const) {
+    it(`gives up when ${step} does not finish in time`, async () => {
+      const { questions, model, db } = setup([choice({ kind: "claimCountsByType" })], fakeDb(), 20);
+      model.hang = step;
+      expect(await questions.ask("How many claims of each type are there?")).toEqual({
+        ok: true,
+        value: {
+          kind: "failed",
+          stage: "model",
+          message: "Error: no answer within 0.02 s",
+          cypher: null,
+        },
+      });
+      expect(asked(db)).toEqual([]);
+    });
+  }
+
+  it("creates the instructed session again after a create that never finished", async () => {
+    const { questions, model } = setup([choice({ kind: "claimCountsByType" })], fakeDb(), 20);
+    model.hang = "create";
+    await questions.ask("How many claims of each type are there?");
+    model.hang = null;
+    const second = await questions.ask("How many claims of each type are there?");
+    expect(second).toMatchObject({ ok: true, value: { kind: "answer" } });
+    expect(model.creates).toBe(2);
+  });
+});
+
+describe("GraphQuestions.ask prompt size", () => {
+  const manyPages = Array.from({ length: 100 }, (_, index) => ({
+    url: `https://example.com/${index}`,
+    title: `Page ${index} ${"x".repeat(100)}`,
+  }));
+
+  it("trims the candidates until the measured prompt fits the session's input quota", async () => {
+    const { questions, model } = setup(
+      [choice({ kind: "claimCountsByType" })],
+      fakeDb(undefined, manyPages),
+    );
+    model.quota = 3_000;
+    await questions.ask("How many claims of each type are there?");
+    const sent = model.prompts[0]?.input ?? "";
+    // 1 文字 1 トークンの偽物で、上限 3000 から使用済み 100 と答えの分 200 を引いた長さ
+    expect(sent.length).toBeLessThanOrEqual(2_700);
+    expect(sent.length).toBeGreaterThan(1_500);
+    expect(sent).toContain("Question: How many claims of each type are there?");
+    expect(model.measured.length).toBeGreaterThan(1);
+  });
+
+  it("does not trim a prompt that already fits", async () => {
+    const { questions, model } = setup([choice({ kind: "claimCountsByType" })]);
+    model.quota = 9_216;
+    await questions.ask("How many claims of each type are there?");
+    expect(model.prompts[0]?.input).toBe(
+      questionPrompt("How many claims of each type are there?", {
+        concepts: CONCEPT_ROWS,
+        pages: PAGE_ROWS,
+      }),
+    );
+  });
+
+  it("keeps to the character budget when tokens cannot be measured", async () => {
+    const { questions, model } = setup(
+      [choice({ kind: "claimCountsByType" })],
+      fakeDb(undefined, manyPages),
+    );
+    await questions.ask("How many claims of each type are there?");
+    expect(model.prompts[0]?.input.length).toBeLessThanOrEqual(PROMPT_CHAR_BUDGET);
+  });
+});
+
+describe("questionPrompt", () => {
+  const question = "Which pages mention OPFS?";
+
+  it("shortens a long title to the title limit with an ellipsis", () => {
+    const title = "t".repeat(TITLE_MAX_CHARS + 30);
+    const prompt = questionPrompt(question, { concepts: [], pages: [{ url: "u", title }] });
+    expect(prompt).toContain(`- ${"t".repeat(TITLE_MAX_CHARS - 1)}…\n`);
+  });
+
+  it("keeps a title at the limit whole", () => {
+    const title = "t".repeat(TITLE_MAX_CHARS);
+    const prompt = questionPrompt(question, { concepts: [], pages: [{ url: "u", title }] });
+    expect(prompt).toContain(`- ${title}\n`);
+  });
+
+  it("shortens a long concept name", () => {
+    const name = "n".repeat(CONCEPT_NAME_MAX_CHARS + 5);
+    const prompt = questionPrompt(question, { concepts: [{ key: "k", name }], pages: [] });
+    expect(prompt).toContain(`${"n".repeat(CONCEPT_NAME_MAX_CHARS - 1)}…`);
+  });
+
+  it("drops the last candidates first to fit the limit and keeps the question", () => {
+    const pages = Array.from({ length: 20 }, (_, index) => ({
+      url: `u${index}`,
+      title: `Title ${index}`,
+    }));
+    const prompt = questionPrompt(question, { concepts: CONCEPT_ROWS, pages }, 200);
+    expect(prompt.length).toBeLessThanOrEqual(200);
+    expect(prompt).toContain("- Title 0\n");
+    expect(prompt).not.toContain("- Title 19");
+    expect(prompt.endsWith(`Question: ${question}`)).toBe(true);
   });
 });
 

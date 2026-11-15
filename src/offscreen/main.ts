@@ -76,6 +76,7 @@ const clips = new ClipPipeline({
 
 const questions = new GraphQuestions({
   api: languageModel,
+  clipping: () => clips.current() !== null,
   execute: (statement) =>
     client.request({
       kind: "execute",
