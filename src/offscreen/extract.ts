@@ -95,6 +95,8 @@ async function promptWithTimeout(
 
 export interface ExtractOptions {
   timeoutMs?: number;
+  /** 分割した本文の `part` 番目（1 から）を抽出し始めるときに呼ぶ */
+  onPart?(part: number, parts: number): void;
 }
 
 /**
@@ -163,6 +165,7 @@ export async function extractPage(
   try {
     const extractions: Extraction[] = [];
     for (const [index, chunk] of chunks.entries()) {
+      options.onPart?.(index + 1, chunks.length);
       const result = await extractChunk(
         base,
         chunkPrompt(page.title, chunk, index, chunks.length),

@@ -173,6 +173,17 @@ describe("extractPage", () => {
     ]);
   });
 
+  it("reports each part before extracting it", async () => {
+    const model = new FakeModel([json(extraction()), json(extraction())]);
+    const parts: string[] = [];
+    await extractPage(
+      model,
+      { title: "T", chunks: ["first", "second"] },
+      { onPart: (part, count) => parts.push(`${part}/${count} after ${model.prompts.length}`) },
+    );
+    expect(parts).toEqual(["1/2 after 0", "2/2 after 1"]);
+  });
+
   it("puts the instructions in the base session that every prompt is cloned from", async () => {
     const model = new FakeModel([json(extraction())]);
     await extractPage(model, { title: "T", chunks: ["text"] });
