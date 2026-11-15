@@ -6,6 +6,7 @@ import ForceGraph2D, {
 } from "react-force-graph-2d";
 import type { GraphLink, GraphNode, GraphView, LinkType } from "./graph-view";
 import styles from "./SidePanel.module.css";
+import { tooltip } from "./tooltip";
 
 // Canvas には CSS の変数が効かないので、SidePanel.module.css の色を写して持つ
 const COLOR = {
@@ -42,25 +43,6 @@ function endId(end: unknown): string {
 
 function shorten(text: string): string {
   return text.length > LABEL_LENGTH ? `${text.slice(0, LABEL_LENGTH - 1)}…` : text;
-}
-
-// force-graph はツールチップの文字列を HTML として入れる
-function escapeHtml(text: string): string {
-  return text.replace(
-    /[&<>"']/g,
-    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c,
-  );
-}
-
-function tooltip(node: Node): string {
-  switch (node.kind) {
-    case "page":
-      return escapeHtml(node.title);
-    case "concept":
-      return escapeHtml(node.name);
-    case "claim":
-      return escapeHtml(node.statement);
-  }
 }
 
 function radius(node: GraphNode): number {
