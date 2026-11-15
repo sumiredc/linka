@@ -58,6 +58,30 @@ describe("chunkText", () => {
     expect(chunkText(text, 30)).toEqual(["One two three. Four five six.", "Seven eight nine."]);
   });
 
+  it("ignores a paragraph break in the first half of the limit", () => {
+    const text = "ab\n\ncdefgh ijklmnop qrstuv";
+    expect(chunkText(text, 20)[0]).toBe("ab\n\ncdefgh ijklmnop");
+  });
+
+  it("ignores a sentence end in the first half of the limit", () => {
+    const text = "Hi. abcdefgh ijklmnop qrstuv";
+    expect(chunkText(text, 20)[0]).toBe("Hi. abcdefgh");
+  });
+
+  it("uses a sentence end that falls exactly on the limit", () => {
+    expect(chunkText("Ab cd. Ef gh.", 6)).toEqual(["Ab cd.", "Ef gh."]);
+  });
+
+  it("treats a closing quote after a full stop as part of the sentence end", () => {
+    const text = 'He said "Stop." Then we all left.';
+    expect(chunkText(text, 20)).toEqual(['He said "Stop."', "Then we all left."]);
+  });
+
+  it("treats a closing parenthesis after a question mark as part of the sentence end", () => {
+    const text = "Is it (really?) Then we all left.";
+    expect(chunkText(text, 20)).toEqual(["Is it (really?)", "Then we all left."]);
+  });
+
   it("treats Japanese full stops as sentence ends without a following space", () => {
     const text = "これは一文目です。これは二文目です。これは三文目です。";
     expect(chunkText(text, 20)).toEqual([
