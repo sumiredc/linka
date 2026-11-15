@@ -1,0 +1,98 @@
+/* mock/styles.css の export dialog に合わせる */
+.dialog {
+  width: min(520px, calc(100vw - 32px));
+}
+.dialog code {
+  font-family: var(--code);
+  font-variant-ligatures: none;
+  font-size: 0.92em;
+}
+
+.steps {
+  padding-left: 20px;
+  margin: 0 0 12px;
+  display: grid;
+  gap: 12px;
+}
+.steps li {
+  min-width: 0;
+}
+
+.command {
+  position: relative;
+  margin: 4px 0 0;
+}
+.command pre {
+  font-family: var(--code);
+  font-size: 12px;
+  background: #1e2533;
+  color: #dfe4ef;
+  border-radius: 7px;
+  padding: 8px 58px 8px 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+.copy {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  border: 1px solid #47506a;
+  background: #2a3245;
+  color: #dfe4ef;
+  border-radius: 5px;
+  padding: 2px 7px;
+  font-size: 11.5px;
+}
+.copy:hover {
+  background: #353f57;
+}
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  margin: 8px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.tab {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: transparent;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.tab:hover {
+  color: var(--ink);
+}
+.tab[aria-selected="true"] {
+  color: var(--act);
+  border-bottom-color: var(--act);
+  font-weight: 600;
+}
+
+.dialog p.note,
+.note {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+.dialog > p.note {
+  margin: 0 0 14px;
+}
+
+.dialog button:disabled {
+  color: var(--other);
+  cursor: not-allowed;
+}
+
+.primary {
+  border: 0;
+  background: var(--act);
+  color: #fff;
+  border-radius: 7px;
+  padding: 7px 13px;
+  font-weight: 600;
+}

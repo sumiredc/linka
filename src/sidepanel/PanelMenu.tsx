@@ -1,10 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import styles from "./SidePanel.module.css";
 
-/**
- * 見出しの「…」メニュー。Export と How to use with agents は枠だけで、中身は #21 で入れる
- */
-export function PanelMenu({ onReset }: { onReset(): void }) {
+/** 見出しの「…」メニュー。グラフが空なら Export は押せない（PRD UC4） */
+export function PanelMenu({
+  canExport,
+  onExport,
+  onGuide,
+  onReset,
+}: {
+  canExport: boolean;
+  onExport(): void;
+  onGuide(): void;
+  onReset(): void;
+}) {
   const [open, setOpen] = useState(false);
   const menu = useRef<HTMLDivElement>(null);
 
@@ -41,11 +49,25 @@ export function PanelMenu({ onReset }: { onReset(): void }) {
       </button>
       {open && (
         <div className={styles.menuList}>
-          <button type="button" disabled title="Coming soon">
+          <button
+            type="button"
+            disabled={!canExport}
+            title={canExport ? undefined : "The graph is empty"}
+            onClick={() => {
+              setOpen(false);
+              onExport();
+            }}
+          >
             Export
           </button>
-          <button type="button" disabled title="Coming soon">
-            How to use with agents
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onGuide();
+            }}
+          >
+            Use with your agent
           </button>
           <button
             type="button"
