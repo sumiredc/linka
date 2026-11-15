@@ -215,6 +215,18 @@ describe("GraphQuestions.ask", () => {
     expect(response).toMatchObject({ ok: true, value: { kind: "answer", rows: [] } });
   });
 
+  it("lists the concepts in the graph with an answer, for the guide shown when nothing matches", async () => {
+    const { questions } = setup(
+      [choice({ kind: "pagesMentioning", concepts: ["OPFS"] })],
+      fakeDb(ok([])),
+    );
+    const response = await questions.ask("Which pages mention OPFS?");
+    expect(response).toMatchObject({
+      ok: true,
+      value: { kind: "answer", rows: [], concepts: ["OPFS", "Web Worker"] },
+    });
+  });
+
   it("runs nothing when the question fits no kind, and lists the concepts in the graph", async () => {
     const { questions, db } = setup([choice({ kind: "none" })]);
     const response = await questions.ask("What should I worry about?");

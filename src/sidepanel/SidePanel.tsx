@@ -228,7 +228,7 @@ export function SidePanel() {
 
       <AskForm
         model={model}
-        busy={question.state.kind === "asking"}
+        state={question.state}
         onAsk={(text) => {
           setSelectedId(null);
           question.ask(text);
