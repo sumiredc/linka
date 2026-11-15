@@ -22,7 +22,8 @@ const extraction = (fields: Partial<Extraction> = {}): Extraction => ({
   ...fields,
 });
 
-type Answer = string | Error | "hang";
+/** hang は答えない。abortable は Chrome と同じく、signal の abort の中で同期的に AbortError で reject する */
+type Answer = string | Error | "hang" | "abortable";
 
 /** 答えを順に返す偽の Prompt API。clone ごとに 1 回だけ prompt を受け付ける */
 class FakeModel implements LanguageModelStatic {
@@ -49,16 +50,24 @@ class FakeModel implements LanguageModelStatic {
   private session(isBase: boolean): LanguageModelSession {
     let used = false;
     return {
-      prompt: async (input, options) => {
-        if (isBase) throw new Error("the base session must not be prompted");
-        if (used) throw new Error("kErrorUnknown");
+      // async にしない。async 関数は返す promise を包み直して決着を遅らせ、Chrome の prompt と順序が変わるため
+      prompt: (input, options) => {
+        if (isBase) return Promise.reject(new Error("the base session must not be prompted"));
+        if (used) return Promise.reject(new Error("kErrorUnknown"));
         used = true;
         this.prompts.push({ input, options });
         const answer = this.answers.shift();
-        if (answer === undefined) throw new Error("no more answers");
+        if (answer === undefined) return Promise.reject(new Error("no more answers"));
         if (answer === "hang") return new Promise<string>(() => {});
-        if (answer instanceof Error) throw answer;
-        return answer;
+        if (answer === "abortable") {
+          return new Promise<string>((_, reject) => {
+            options?.signal?.addEventListener("abort", () =>
+              reject(new DOMException("signal is aborted without reason", "AbortError")),
+            );
+          });
+        }
+        if (answer instanceof Error) return Promise.reject(answer);
+        return Promise.resolve(answer);
       },
       clone: async () => {
         this.clones++;
@@ -141,6 +150,15 @@ describe("extractChunk", () => {
     expect(result).toMatchObject({ ok: false, error: { kind: "prompt" } });
     expect(model.prompts[0]?.options?.signal?.aborted).toBe(true);
     expect(model.destroyed).toBe(1);
+  });
+
+  it("states the timeout in seconds even when the aborted prompt rejects with an AbortError", async () => {
+    const model = new FakeModel(["abortable"]);
+    const result = await extractChunk(await model.create(), "text", { timeoutMs: 10 });
+    expect(result).toEqual({
+      ok: false,
+      error: { kind: "prompt", message: "Error: no answer within 0.01 s" },
+    });
   });
 });
 

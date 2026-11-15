@@ -79,8 +79,10 @@ async function promptWithTimeout(
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
-      controller.abort();
-      reject(new Error(`no answer within ${timeoutMs / 1000} s`));
+      const error = new Error(`no answer within ${timeoutMs / 1000} s`);
+      // Chrome の prompt は abort の中で同期的に AbortError で reject するので、先に reject して race に勝たせる
+      reject(error);
+      controller.abort(error);
     }, timeoutMs);
   });
   try {
@@ -166,10 +168,16 @@ export async function extractPage(
     const extractions: Extraction[] = [];
     for (const [index, chunk] of chunks.entries()) {
       options.onPart?.(index + 1, chunks.length);
+      const started = performance.now();
       const result = await extractChunk(
         base,
         chunkPrompt(page.title, chunk, index, chunks.length),
         options,
+      );
+      // 分割の大きさを実測で調整するため、1 回ごとの所要時間を残す
+      const seconds = ((performance.now() - started) / 1000).toFixed(1);
+      console.info(
+        `[linka] extract part ${index + 1}/${chunks.length}: ${seconds} s${result.ok ? "" : ` (failed: ${result.error.kind})`}`,
       );
       if (!result.ok) {
         return failed(
