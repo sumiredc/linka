@@ -1,7 +1,6 @@
 // 画面（吹き出し・サイドパネル）から DB を使う入口。
 // service worker には offscreen document を用意させるだけで、依頼は offscreen document に直接送る
 import {
-  type DbFailure,
   type DbNotification,
   type DbRequest,
   type DbResponse,
@@ -12,26 +11,51 @@ import {
   type RuntimeMessage,
 } from "./messages";
 
-async function send<T>(message: RuntimeMessage, unanswered: string): Promise<T | DbFailure> {
+export type SendMessage = (message: RuntimeMessage) => Promise<unknown>;
+
+// 宛先が無くて届かなかったときの chrome.runtime.sendMessage のエラー。返事の途中で切れたときとは区別する
+const NO_RECEIVER = /receiving end does not exist/i;
+
+type Sent<T> = { response: T } | { error: string; delivered: boolean };
+
+async function send<T>(sendMessage: SendMessage, message: RuntimeMessage): Promise<Sent<T>> {
   try {
-    const response: T | undefined = await chrome.runtime.sendMessage(message);
-    return response ?? failure("unreachable", unanswered);
+    const response = (await sendMessage(message)) as T | undefined;
+    if (response === undefined) return { error: "no answer", delivered: false };
+    return { response };
   } catch (error) {
-    return failure("unreachable", error instanceof Error ? error.message : String(error));
+    const text = error instanceof Error ? error.message : String(error);
+    return { error: text, delivered: !NO_RECEIVER.test(text) };
   }
 }
 
-export async function askDb<R extends DbRequest>(request: R): Promise<DbResponse<DbResultOf<R>>> {
-  const ensured = await send<EnsureResponse>(
-    { target: "background", type: "ensureOffscreen" },
-    "the service worker did not answer",
-  );
-  if (!ensured.ok) return ensured;
-  return send<DbResponse<DbResultOf<R>>>(
-    { target: "offscreen", type: "db", request },
-    "the offscreen document did not answer",
-  );
+export function createAskDb(sendMessage: SendMessage) {
+  const ensure = async (): Promise<EnsureResponse> => {
+    const sent = await send<EnsureResponse>(sendMessage, {
+      target: "background",
+      type: "ensureOffscreen",
+    });
+    return "response" in sent ? sent.response : failure("unreachable", sent.error);
+  };
+
+  return async function askDb<R extends DbRequest>(request: R): Promise<DbResponse<DbResultOf<R>>> {
+    const message: RuntimeMessage = { target: "offscreen", type: "db", request };
+    let lastError = "";
+    // ensure と送信の間に offscreen document が閉じられたなら、作り直させて 1 度だけ送り直す
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const ensured = await ensure();
+      if (!ensured.ok) return ensured;
+      const sent = await send<DbResponse<DbResultOf<R>>>(sendMessage, message);
+      if ("response" in sent) return sent.response;
+      lastError = sent.error;
+      // 届いていたかもしれない依頼を送り直すと、書き込みが 2 回起きうる
+      if (sent.delivered) break;
+    }
+    return failure("unreachable", lastError);
+  };
 }
+
+export const askDb = createAskDb((message) => chrome.runtime.sendMessage(message));
 
 /** DB の変化の通知を受け取る。戻り値を呼ぶと受け取りをやめる */
 export function onDbNotification(listener: (notification: DbNotification) => void): () => void {
