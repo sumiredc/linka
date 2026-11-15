@@ -30,16 +30,51 @@ describe("the Use with your agent dialog", () => {
     expect(ask).toMatch(/^Ask your agent/);
   });
 
+  it("points at the first line of the store command for a different download folder", () => {
+    const build = steps()[0];
+    expect(text(build)).toContain("change the path on the first line");
+    expect(build?.querySelector("pre")?.textContent?.split("\n")[0]).toBe(
+      'downloads="$HOME/Downloads" &&',
+    );
+  });
+
   it("tells what to do when the terminal may not read ~/Downloads, with a copyable command for ~/linka", () => {
     const build = steps()[0];
     expect(text(build)).toContain("Operation not permitted");
-    expect(text(build)).toContain("Files and Folders → Downloads (or Full Disk Access)");
+    expect(text(build)).toContain(
+      "Privacy & Security → Files and Folders → your terminal app → Downloads Folder (or Full Disk Access)",
+    );
     expect(text(build)).toContain("restart the terminal");
-    expect(text(build)).toContain("move the file to ~/linka/linka-export.cypher in Finder");
-    const commands = [...(build?.querySelectorAll("pre") ?? [])].map((pre) => pre.textContent);
-    expect(commands).toContain(BUILD_STORE_FROM_LINKA_COMMAND);
+    expect(text(build)).toContain("move the file to ~/linka (create the folder if needed)");
+    expect(text(build)).toContain(
+      "rename it to linka-export.cypher if it is, say, linka-export (1).cypher",
+    );
     const fallback = build?.querySelectorAll("pre")[1];
+    expect(fallback?.textContent).toBe(BUILD_STORE_FROM_LINKA_COMMAND);
     expect(fallback?.parentElement?.querySelector("button")?.textContent).toBe("Copy");
+  });
+
+  it("names each Copy button after what it copies, so a screen reader can tell them apart", () => {
+    const names = steps().flatMap((step) =>
+      [...step.querySelectorAll("button[data-state]")].map((button) =>
+        button.getAttribute("aria-label"),
+      ),
+    );
+    expect(names).toEqual([
+      "Copy the store command",
+      "Copy the command for a file in ~/linka",
+      "Copy the Claude Code command",
+      "Copy the Codex command",
+      "Copy the prompt",
+    ]);
+  });
+
+  it("announces the copy result in a status region next to each button", () => {
+    for (const button of steps().flatMap((step) => [
+      ...step.querySelectorAll("button[data-state]"),
+    ])) {
+      expect(button.nextElementSibling?.getAttribute("role")).toBe("status");
+    }
   });
 
   it("says step 1 must succeed before registering, and how to check when /mcp shows linka failed", () => {
