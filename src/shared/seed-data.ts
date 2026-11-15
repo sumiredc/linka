@@ -4,12 +4,9 @@ import { type Clip, ClipSchema, ExtractionSchema } from "./extraction";
 import type { AddressesLink } from "./graph-statements";
 import { normalizeUrl } from "./url";
 
-/**
- * ADDRESSES の端にする Claim を、ページと文で指す。
- * `page` は絶対 URL か、同梱サンプルなら拡張機能の中の相対パス（`samples/…`）。
- */
+/** ADDRESSES の端にする Claim を、ページの URL と文で指す。 */
 export const ClaimRefSchema = z.object({
-  page: z.string().min(1),
+  page: z.url(),
   statement: z.string().min(1),
 });
 export type ClaimRef = z.infer<typeof ClaimRefSchema>;
@@ -30,21 +27,24 @@ export type DemoData = z.infer<typeof DemoDataSchema>;
 
 /**
  * 同梱サンプルページ（`samples/<name>.html`）の事前抽出データ（`samples/<name>.json`）。
- * 拡張機能の ID は環境ごとに変わるので URL は持たず、クリップするときに拡張機能の URL から作る。
+ * 拡張機能の ID は環境ごとに変わるので、Page の URL には `chrome-extension://` ではなく、
+ * どの環境でも同じ `url`（リポジトリにあるそのファイルの URL）を使う。
  * Nano が無いと UC2 の判定もできないので、デモデータの Claim との ADDRESSES も判定済みで持つ。
  */
 export const SampleSchema = z.object({
+  /** 拡張機能の中でのページの位置。開いているタブがサンプルかどうかはこれで見分ける */
   path: z.string().regex(/^samples\/[a-z0-9-]+\.html$/),
+  url: z.url(),
   title: z.string(),
   extraction: ExtractionSchema,
   addresses: z.array(AddressesRefSchema),
 });
 export type Sample = z.infer<typeof SampleSchema>;
 
-/** サンプルを、拡張機能の URL（`chrome.runtime.getURL("")`）の下のページとしてクリップにする。 */
-export function sampleClip(sample: Sample, extensionBaseUrl: string, clippedAt: string): Clip {
+/** サンプルをクリップにする。Page の URL はサンプルの `url` にする。 */
+export function sampleClip(sample: Sample, clippedAt: string): Clip {
   return {
-    url: new URL(sample.path, extensionBaseUrl).href,
+    url: sample.url,
     title: sample.title,
     clippedAt,
     source: "sample",
@@ -63,7 +63,6 @@ function describeRef(ref: ClaimRef): string {
 export function resolveAddresses(
   clips: readonly Clip[],
   refs: readonly AddressesRef[],
-  baseUrl?: string,
 ): AddressesLink[] {
   const types = new Map<string, string>();
   for (const clip of clips) {
@@ -72,7 +71,7 @@ export function resolveAddresses(
     }
   }
   const resolve = (ref: ClaimRef, expected: "solution" | "concern") => {
-    const page = normalizeUrl(new URL(ref.page, baseUrl).href);
+    const page = normalizeUrl(ref.page);
     const id = claimId(page, ref.statement);
     const type = types.get(id);
     if (type === undefined) throw new Error(`Claim が見つかりません: ${describeRef(ref)}`);

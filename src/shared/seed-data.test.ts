@@ -5,7 +5,6 @@ import { resolveAddresses, type Sample, SampleSchema, sampleClip } from "./seed-
 
 const CONCERN_URL = "https://example.com/concern";
 const SOLUTION_URL = "https://example.com/solution";
-const EXTENSION = "chrome-extension://abcdefghijklmnopabcdefghijklmnop/";
 
 function clip(url: string, claims: Clip["extraction"]["claims"]): Clip {
   return {
@@ -27,6 +26,7 @@ const clips = [
 
 const sample: Sample = {
   path: "samples/keep-data.html",
+  url: "https://example.com/samples/keep-data.html",
   title: "Keep data",
   extraction: { summary: "", concepts: [], authors: [], claims: [], relatedConcepts: [] },
   addresses: [],
@@ -46,25 +46,6 @@ describe("resolveAddresses", () => {
         concern: claimId(CONCERN_URL, "Storage gets evicted."),
       },
     ]);
-  });
-
-  it("resolves a relative page against the base URL", () => {
-    const sampleUrl = `${EXTENSION}samples/keep-data.html`;
-    const withSample = [
-      ...clips,
-      clip(sampleUrl, [{ statement: "Write edits now.", type: "solution", concepts: [] }]),
-    ];
-    const links = resolveAddresses(
-      withSample,
-      [
-        {
-          solution: { page: "samples/keep-data.html", statement: "Write edits now." },
-          concern: { page: CONCERN_URL, statement: "Storage gets evicted." },
-        },
-      ],
-      EXTENSION,
-    );
-    expect(links[0]?.solution).toBe(claimId(sampleUrl, "Write edits now."));
   });
 
   it("rejects a statement that no clip asserts", () => {
@@ -99,19 +80,29 @@ describe("resolveAddresses", () => {
 });
 
 describe("sampleClip", () => {
-  it("places the sample page under the extension's URL", () => {
-    expect(sampleClip(sample, EXTENSION, "2026-11-15T09:00:00Z").url).toBe(
-      `${EXTENSION}samples/keep-data.html`,
+  it("records the sample's canonical URL as the page URL", () => {
+    expect(sampleClip(sample, "2026-11-15T09:00:00Z").url).toBe(
+      "https://example.com/samples/keep-data.html",
     );
   });
 
   it("marks the clip as coming from a bundled sample", () => {
-    expect(sampleClip(sample, EXTENSION, "2026-11-15T09:00:00Z").source).toBe("sample");
+    expect(sampleClip(sample, "2026-11-15T09:00:00Z").source).toBe("sample");
   });
 });
 
 describe("SampleSchema", () => {
   it("rejects a path outside samples/", () => {
     expect(SampleSchema.safeParse({ ...sample, path: "popup.html" }).success).toBe(false);
+  });
+
+  it("rejects a judged pair whose page is a relative path", () => {
+    const addresses = [
+      {
+        solution: { page: "samples/keep-data.html", statement: "Write edits now." },
+        concern: { page: CONCERN_URL, statement: "Storage gets evicted." },
+      },
+    ];
+    expect(SampleSchema.safeParse({ ...sample, addresses }).success).toBe(false);
   });
 });

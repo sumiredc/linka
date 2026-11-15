@@ -1,5 +1,6 @@
 {
   "path": "samples/keep-offline-data.html",
+  "url": "https://github.com/sumiredc/linka/blob/main/public/samples/keep-offline-data.html",
   "title": "Keeping offline data from disappearing",
   "extraction": {
     "summary": "Lists two ways a local-first app loses data, edits kept only in memory and browser eviction, and how to guard against each.",
@@ -37,7 +38,7 @@
   "addresses": [
     {
       "solution": {
-        "page": "samples/keep-offline-data.html",
+        "page": "https://github.com/sumiredc/linka/blob/main/public/samples/keep-offline-data.html",
         "statement": "Request persistent storage once the user has saved real work, and show quota usage so eviction does not come as a surprise."
       },
       "concern": {
@@ -51,7 +52,7 @@
         "statement": "The y-indexeddb provider stores Yjs shared data persistently in the browser, so changes are loaded from the local database the next time the session is joined."
       },
       "concern": {
-        "page": "samples/keep-offline-data.html",
+        "page": "https://github.com/sumiredc/linka/blob/main/public/samples/keep-offline-data.html",
         "statement": "Unsynced edits kept only in JavaScript memory are lost if the tab closes before the next sync."
       }
     }

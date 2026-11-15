@@ -1,5 +1,6 @@
 {
   "path": "samples/crdt-notes-sync.html",
+  "url": "https://github.com/sumiredc/linka/blob/main/public/samples/crdt-notes-sync.html",
   "title": "Syncing a local-first notes app",
   "extraction": {
     "summary": "Replaces last-write-wins sync in a notes app with Yjs documents persisted to IndexedDB and synced over WebSocket, and notes that CRDT history grows.",
@@ -42,13 +43,13 @@
         "statement": "With a CRDT, users can modify the data on any replica independently, and the CRDT merges the changes automatically into a consistent state."
       },
       "concern": {
-        "page": "samples/crdt-notes-sync.html",
+        "page": "https://github.com/sumiredc/linka/blob/main/public/samples/crdt-notes-sync.html",
         "statement": "Syncing whole documents with last-write-wins silently drops one device's changes when two devices edit the same note offline."
       }
     },
     {
       "solution": {
-        "page": "samples/crdt-notes-sync.html",
+        "page": "https://github.com/sumiredc/linka/blob/main/public/samples/crdt-notes-sync.html",
         "statement": "Persist each Yjs document to IndexedDB on every change and sync updates over WebSocket when online, so the app keeps working while the server is unreachable."
       },
       "concern": {
