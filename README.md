@@ -1,3 +1,5 @@
+<img src="assets/logo.svg" alt="" width="96" height="96">
+
 # Linka
 
 *Clip what you read in Chrome into a local knowledge graph — then hand that context to your coding agent.*
