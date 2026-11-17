@@ -200,6 +200,7 @@ flowchart LR
 - 事前条件：グラフに 1 ページ以上ある。利用者の端末に Relate CLI がある
 - 主フロー：
   - 手順はすべて、利用者が作業するプロジェクトのフォルダで完結する。ダウンロードフォルダやホームの決まった場所には頼らない（OS ごとの違いを案内に持ち込まないため）
+  - コマンドは「macOS / Linux」と「Windows（PowerShell）」を切り替えて示す。初めはブラウザが動いている OS の方を見せる
   - 利用者が「Export」を押すと、保存先を選ぶダイアログが開く。プロジェクトのフォルダを選ぶと、グラフ全体を再現する Cypher ファイル（`linka-export.cypher`）が保存される。同じ名前のファイルは置き換えられる
   - 利用者がそのフォルダで `relate query -d linka.rl < linka-export.cypher` を流し、単一ファイルのストアにする（`query` を省いた `relate -d linka.rl < …` は文を実行せず、ヘルプを出して 0 で終わる）。書き出しの先頭は全ノードを消す文なので、前の `linka.rl` に流しても中身が書き出しと同じになる
   - 利用者が Relate の MCP サーバー（`relate serve --database "$PWD/linka.rl" --read-only --mcp stdio`）をコーディングエージェントに登録する。手順は Claude Code（`claude mcp add`。既定の local scope で、このプロジェクトだけに登録される）と Codex（`codex mcp add`。`~/.codex/config.toml` に書かれ、どのプロジェクトからも見える。別のプロジェクトで流し直すと、そちらの `linka.rl` に置き換わる）の両方をタブで切り替えて示す。`--read-only` を付けると、エージェントに見えるツールは `read_cypher` と `get_schema` だけになり、ファイルも書き換わらない（付けないと `write_cypher` も出て、エージェントがグラフを書き換えられる）。`linka.rl` はシェルが `$PWD` を展開した絶対パスで書く（相対パスだと、サブフォルダでエージェントを起動したときに見つからない）。`DO_NOT_TRACK=1` を環境変数に入れる

@@ -4,11 +4,11 @@ import { EXPORT_FILE_NAME } from "../shared/graph-export";
 import styles from "./AgentDialog.module.css";
 import {
   AGENT_PROMPT,
-  BUILD_STORE_COMMAND,
-  CHECK_STORE_COMMAND,
-  CLAUDE_CODE_COMMAND,
-  CODEX_COMMAND,
-  DIRECT_QUERY_COMMAND,
+  COMMANDS,
+  defaultShell,
+  type GuideCommands,
+  SHELLS,
+  type Shell,
   STORE_FILE_NAME,
 } from "./agent-guide";
 import { type ExportOutcome, exportGraph, pickSaveTarget } from "./export-graph";
@@ -161,7 +161,7 @@ const AGENTS = [
 
 type AgentId = (typeof AGENTS)[number]["id"];
 
-function AgentTabs() {
+function AgentTabs({ commands }: { commands: GuideCommands }) {
   const [agent, setAgent] = useState<AgentId>("claude");
   const tabs = useRef<Record<AgentId, HTMLButtonElement | null>>({ claude: null, codex: null });
 
@@ -203,7 +203,7 @@ function AgentTabs() {
         aria-labelledby="agent-tab-claude"
         hidden={agent !== "claude"}
       >
-        <Command text={CLAUDE_CODE_COMMAND} label="the Claude Code command" />
+        <Command text={commands.claudeCode} label="the Claude Code command" />
         <p className={styles.note}>
           Registers linka for this project only. Check it with <code>claude mcp list</code>.
         </p>
@@ -214,7 +214,7 @@ function AgentTabs() {
         aria-labelledby="agent-tab-codex"
         hidden={agent !== "codex"}
       >
-        <Command text={CODEX_COMMAND} label="the Codex command" />
+        <Command text={commands.codex} label="the Codex command" />
         <p className={styles.note}>
           Writes <code>[mcp_servers.linka]</code> to <code>~/.codex/config.toml</code>, so every
           project sees it; running it in another project switches linka to that project. Restart
@@ -222,6 +222,28 @@ function AgentTabs() {
         </p>
       </div>
     </>
+  );
+}
+
+/** 手順のコマンドを、どのターミナルの書き方で見せるか。複数の手順のコマンドが変わるので、タブではなく切り替えボタンにする */
+function ShellSwitch({ shell, onChange }: { shell: Shell; onChange(shell: Shell): void }) {
+  return (
+    <fieldset className={styles.shells}>
+      <legend>Commands for</legend>
+      <div className={styles.shellOptions}>
+        {SHELLS.map(({ id, name }) => (
+          <button
+            key={id}
+            type="button"
+            className={styles.shell}
+            aria-pressed={shell === id}
+            onClick={() => onChange(id)}
+          >
+            {name}
+          </button>
+        ))}
+      </div>
+    </fieldset>
   );
 }
 
@@ -243,6 +265,8 @@ export function AgentDialog({
   }, [open]);
 
   const saved = exported.kind === "done" && exported.outcome.ok;
+  const [shell, setShell] = useState<Shell>(() => defaultShell(navigator.userAgent));
+  const commands = COMMANDS[shell];
 
   return (
     <dialog
@@ -253,6 +277,7 @@ export function AgentDialog({
     >
       <h2 id="agent-title">Use with your agent</h2>
       <Intro exported={exported} />
+      <ShellSwitch shell={shell} onChange={setShell} />
       <ol className={styles.steps}>
         <li>
           <span>
@@ -270,17 +295,17 @@ export function AgentDialog({
             Make a Relate file. Run this again after each export; it replaces what{" "}
             <code>{STORE_FILE_NAME}</code> holds.
           </span>
-          <Command text={BUILD_STORE_COMMAND} label="the store command" />
+          <Command text={commands.buildStore} label="the store command" />
         </li>
         <li>
           <span>
             Register it as a read-only MCP server. Do this after step 2 succeeds; otherwise the
             server fails to start.
           </span>
-          <AgentTabs />
+          <AgentTabs commands={commands} />
           <p className={styles.note}>
             If <code>/mcp</code> shows linka as failed, check that{" "}
-            <code>{CHECK_STORE_COMMAND}</code> in your project folder lists the file. If not, run
+            <code>{commands.checkStore}</code> in your project folder lists the file. If not, run
             step 2.
           </p>
         </li>
@@ -290,7 +315,7 @@ export function AgentDialog({
         </li>
       </ol>
       <p className={styles.note}>
-        To check the file without an agent, run <code>{DIRECT_QUERY_COMMAND}</code>
+        To check the file without an agent, run <code>{commands.directQuery}</code>
       </p>
       <div className={panel.dialogActions}>
         {!saved && (

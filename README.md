@@ -119,6 +119,14 @@ Before you start, **install the Relate CLI** (see [Relate CLI](#relate-cli)). **
    DO_NOT_TRACK=1 relate query --jsonl -d linka.rl < linka-export.cypher
    ```
 
+   Windows (PowerShell):
+
+   ```powershell
+   $env:DO_NOT_TRACK=1; cmd /c "relate query --jsonl -d linka.rl < linka-export.cypher"
+   ```
+
+   PowerShell has no `<`, and piping the file in Windows PowerShell 5.1 can change its encoding, so `cmd` passes the file as it is.
+
    Run it again after each export. The export starts by deleting everything in the store, so `linka.rl` ends up with exactly the exported graph, and pages you deleted in Linka do not remain. On a new file, Relate notes that statement 1 changed nothing; that is expected.
 
 3. **Register it as a read-only MCP server.** Do this after step 2 succeeds; otherwise the server fails to start. Run it in your project folder: `$PWD` is expanded by your shell, so the agent's configuration gets an absolute path and works even when you start the agent in a subfolder.
@@ -131,10 +139,24 @@ Before you start, **install the Relate CLI** (see [Relate CLI](#relate-cli)). **
 
    Registers linka for this project only (the default `local` scope). Check it with `claude mcp list`.
 
+   Claude Code on Windows (PowerShell):
+
+   ```powershell
+   claude mcp add linka -e DO_NOT_TRACK=1 '--' relate serve --database "$PWD\linka.rl" --read-only --mcp stdio
+   ```
+
+   The `--` is quoted because Windows PowerShell 5.1 drops a bare `--` before passing the arguments on.
+
    Codex:
 
    ```sh
    codex mcp add linka --env DO_NOT_TRACK=1 -- relate serve --database "$PWD/linka.rl" --read-only --mcp stdio
+   ```
+
+   Codex on Windows (PowerShell):
+
+   ```powershell
+   codex mcp add linka --env DO_NOT_TRACK=1 '--' relate serve --database "$PWD\linka.rl" --read-only --mcp stdio
    ```
 
    Writes `[mcp_servers.linka]` to `~/.codex/config.toml`, so every project sees it; running it in another project switches linka to that project's file. Restart Codex and run `/mcp` to see linka.
@@ -155,7 +177,13 @@ To check the file without an agent, run this in your project folder:
 DO_NOT_TRACK=1 relate query --read-only -d linka.rl "MATCH (p:Page) RETURN p.title AS title"
 ```
 
-These commands are written for macOS and Linux shells; they were checked on macOS with Relate CLI 1.0.1.
+On Windows (PowerShell):
+
+```powershell
+$env:DO_NOT_TRACK=1; relate query --read-only -d linka.rl "MATCH (p:Page) RETURN p.title AS title"
+```
+
+The macOS and Linux commands were checked on macOS with Relate CLI 1.0.1. The Windows commands were not run on Windows.
 
 ## Where the data lives
 
@@ -204,6 +232,8 @@ relate --version
 ```
 
 The installer always installs the latest release. Linka was checked with **Relate CLI 1.0.1** (the same version as the bundled `@relate/relate-wasm`) on macOS (arm64); to pin that version, download the binary for your platform (such as `relate-darwin-arm64`) from the [`v1.0.1` release](https://github.com/relatedb/relate/releases). Other platforms were not checked.
+
+On Windows, the installer above is not available. Download `relate-windows-amd64.exe` from the [`v1.0.1` release](https://github.com/relatedb/relate/releases), rename it to `relate.exe`, and put it in a folder on your `PATH`.
 
 ### Turning off the CLI's telemetry
 

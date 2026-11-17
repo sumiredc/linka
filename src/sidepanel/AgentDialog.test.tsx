@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { EXPORT_FILE_NAME } from "../shared/graph-export";
 import { AgentDialog, type AgentHandoff } from "./AgentDialog";
-import { BUILD_STORE_COMMAND, CHECK_STORE_COMMAND } from "./agent-guide";
+import { COMMANDS } from "./agent-guide";
 
 // 手順はプロジェクトのフォルダで完結する。.rl を作る前に登録すると失敗する（#21 の実機確認でつまずいた）
 
@@ -15,11 +15,22 @@ const handoff: AgentHandoff = {
   close: () => {},
 };
 
-const steps = () => {
+const render = () => {
   const html = renderToStaticMarkup(<AgentDialog handoff={handoff} canExport />);
-  const document = new DOMParser().parseFromString(html, "text/html");
-  return [...document.querySelectorAll("ol > li")];
+  return new DOMParser().parseFromString(html, "text/html");
 };
+
+const steps = () => [...render().querySelectorAll("ol > li")];
+
+const MAC = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/138.0";
+const WINDOWS = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/138.0";
+
+const onBrowser = (userAgent: string) =>
+  vi.spyOn(navigator, "userAgent", "get").mockReturnValue(userAgent);
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const text = (element: Element | undefined) => element?.textContent?.replace(/\s+/g, " ") ?? "";
 
@@ -39,10 +50,38 @@ describe("the Use with your agent dialog", () => {
   });
 
   it("shows the store command as one line run in the project folder", () => {
+    onBrowser(MAC);
     const build = steps()[1];
-    expect(build?.querySelector("pre")?.textContent).toBe(BUILD_STORE_COMMAND);
-    expect(BUILD_STORE_COMMAND).not.toContain("\n");
+    expect(build?.querySelector("pre")?.textContent).toBe(COMMANDS.posix.buildStore);
+    expect(COMMANDS.posix.buildStore).not.toContain("\n");
   });
+
+  it.each([
+    ["macOS / Linux", MAC, COMMANDS.posix],
+    ["Windows", WINDOWS, COMMANDS.powershell],
+  ])(
+    "shows the %s commands first on that system, with a switch to the other",
+    (name, userAgent, commands) => {
+      onBrowser(userAgent);
+      const document = render();
+      const pressed = [...document.querySelectorAll("[aria-pressed]")].map((button) => [
+        button.textContent,
+        button.getAttribute("aria-pressed"),
+      ]);
+      expect(pressed).toEqual([
+        ["macOS / Linux", String(name === "macOS / Linux")],
+        ["Windows", String(name === "Windows")],
+      ]);
+      const shown = [...document.querySelectorAll("pre")].map((pre) => pre.textContent);
+      expect(shown).toEqual([
+        commands.buildStore,
+        commands.claudeCode,
+        commands.codex,
+        expect.any(String),
+      ]);
+      expect(document.body.textContent).toContain(commands.directQuery);
+    },
+  );
 
   it("names each Copy button after what it copies, so a screen reader can tell them apart", () => {
     const names = steps().flatMap((step) =>
@@ -70,7 +109,7 @@ describe("the Use with your agent dialog", () => {
     const register = text(steps()[2]);
     expect(register).toContain("after step 2 succeeds");
     expect(register).toContain("If /mcp shows linka as failed");
-    expect(register).toContain(CHECK_STORE_COMMAND);
+    expect(register).toContain(COMMANDS.posix.checkStore);
     expect(register).toContain("run step 2");
   });
 });
