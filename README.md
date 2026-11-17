@@ -26,7 +26,7 @@ Unlike Gemini in Chrome or a bookmark manager, Linka keeps the structure between
 | Where | Mode | Why |
 |---|---|---|
 | Inside the extension | `@relate/relate-wasm` 1.0.1 persisted to **OPFS** (`opfs://linka-graph`), opened in a dedicated worker owned by the extension's offscreen document | Relate Wasm can persist only to OPFS, and only from a dedicated worker. A service worker cannot start one, so a single offscreen document owns the store and the popup and every side panel send it requests (one OPFS store can be open in only one place at a time). |
-| Bundled with the repository | `data/linka.rl`, a **single-file store** built with the Relate CLI | Judges can inspect the persisted graph with the CLI without loading the extension. It is built from the same `seed/demo.cypher` that the extension loads on first run, so it has the same content. |
+| Bundled with the repository | `data/linka.rl`, a **single-file store** built with the Relate CLI | Judges can inspect the persisted graph with the CLI without loading the extension. It holds a demo graph of 15 research pages built from `seed/demo.cypher`; the extension itself starts with an empty graph. |
 | Handing off to an agent | `relate query` turns the extension's Cypher export into a single-file store; `relate serve --read-only --mcp stdio` exposes it to Claude Code or Codex | The agent sees only `read_cypher` and `get_schema`, and the file is not modified. |
 
 The graph model:
@@ -49,7 +49,7 @@ Extraction results are written with parameterized `MERGE` statements built by th
 
 - Chrome 138 or later on desktop
 - Node.js 26.13.1 and npm 12.2.2. The versions are pinned in `package.json` (`engines` and `volta`), and `.npmrc` sets `engine-strict=true`, so other versions fail `npm ci`. With [Volta](https://volta.sh/) installed, the right versions are picked automatically.
-- Optional, for questions and for clipping real pages: Gemini Nano (see [Without Gemini Nano](#without-gemini-nano))
+- Gemini Nano on your device, for clipping pages and asking questions (see [Gemini Nano](#gemini-nano))
 - Optional, for inspecting `data/linka.rl` and handing the graph to an agent: the Relate CLI 1.0.x (see [Relate CLI](#relate-cli))
 
 ### Build and load the extension
@@ -68,39 +68,32 @@ npm run build
 
 ### First run
 
-Open Chrome's side panel (the side panel button in the toolbar) and choose **Linka**. Clicking the Linka icon itself clips the current page (see [Use](#use)); its popup offers **Open side panel** after a clip. On first run the side panel shows a demo graph from technical research on local-first, offline web storage: 15 pages, 29 concepts, 9 people, 48 claims and 10 cross-page `ADDRESSES` links. The header shows the AI status: `AI ready`, `Downloading AI`, or not available with the reason.
+Open Chrome's side panel (the side panel button in the toolbar) and choose **Linka**. The graph starts empty, and the side panel tells you how to clip your first page. Clicking the Linka icon itself clips the current page (see [Use](#use)); its popup offers **Open side panel** after a clip. The header shows the AI status: `AI ready`, `Downloading AI`, or not available with the reason.
 
-The next time you open it, the side panel shows your graph as you left it; the demo data is not loaded again. **… → Reset to demo data** brings the demo graph back (after a confirmation).
+The next time you open it, the side panel shows your graph as you left it. **… → Clear graph** deletes every page you clipped, after a confirmation.
 
-### Without Gemini Nano
+### Gemini Nano
 
-Gemini Nano runs only where Chrome supports it. Per [Chrome's Prompt API docs](https://developer.chrome.com/docs/ai/prompt-api), it needs a desktop OS (Windows 10/11, macOS 13+, Linux, or ChromeOS on a Chromebook Plus; not Android or iOS), at least 22 GB of free disk space, and either a GPU with more than 4 GB of VRAM or a CPU with 16 GB of RAM and 4 or more cores. It may also be disabled by an enterprise policy (not verified). If the model is not on the device yet, its download starts when you open the Linka popup; the popup and the side panel show the progress.
+Linka extracts and connects pages, and answers questions, with Gemini Nano through Chrome's Prompt API. Without it, you cannot clip pages or ask questions; you can still browse, export and clear a graph you already have.
 
-| Feature | Without Gemini Nano |
-|---|---|
-| Demo graph in the side panel, node details, Reset to demo data | Works |
-| Clipping the bundled sample pages | Works (uses pre-extracted data shipped with the extension) |
-| Export and the agent hand-off (UC4) | Works |
-| Clipping any other page | Not available. The popup says why and the graph is not changed |
-| Asking the graph a question | Not available. The side panel says on-device AI is required |
+Per [Chrome's Prompt API docs](https://developer.chrome.com/docs/ai/prompt-api), Gemini Nano needs:
 
-The three bundled sample pages are inside the extension. Find Linka's ID on `chrome://extensions` and open one of these in a tab, then click the Linka icon:
+- A desktop OS: Windows 10/11, macOS 13+, Linux, or ChromeOS on a Chromebook Plus (not Android or iOS)
+- At least 22 GB of free disk space on the volume with your Chrome profile
+- Either a GPU with more than 4 GB of VRAM, or a CPU with 16 GB of RAM and 4 or more cores
 
-- `chrome-extension://<extension-id>/samples/keep-offline-data.html`
-- `chrome-extension://<extension-id>/samples/crdt-notes-sync.html`
-- `chrome-extension://<extension-id>/samples/sqlite-worker-owner.html`
+It may also be disabled by an enterprise policy (not verified).
 
-Each sample's solutions connect to concerns already in the demo graph, so the popup shows suggested connections.
+To get the model, open the Linka popup (click the Linka icon on any page). If the model is not on your device yet, its download starts there, and the popup and the side panel show the progress. When it finishes, the side panel header shows `AI ready`. If it shows that AI is not available, the reason next to it says why.
 
 ### Use
 
 1. **Clip a page.** Open an article and click the Linka icon. Clipping starts right away: read the page → extract concepts and claims → save to the graph → find connections to other pages. You can close the popup; clipping continues. When it finishes, the popup lists the counts and the suggested connections, and the icon shows that the page is clipped. Clicking the icon on a clipped page offers **Clip again** (replaces what was extracted from that page) and **Open side panel**. Extraction asks Gemini Nano for English input and output, so English pages work best.
 2. **Browse the graph.** In the side panel, click a node to see its details.
-3. **Ask a question** (needs Gemini Nano). Type an English question and press ⌘/Ctrl + Enter. For example:
+3. **Ask a question.** Type an English question and press ⌘/Ctrl + Enter. For example, after clipping a few pages about offline web storage:
    - What concerns are there about OPFS?
    - Which solutions address concerns about offline support?
    - Which pages mention both OPFS and Web Worker?
-   - Which pages propose solutions to the concerns raised on the local-first software page?
 
    The side panel shows the executed Cypher and the results, and highlights them in the graph. Click a page in the results to open it in a new tab. If a question does not fit a supported type, it lists the types and the concepts in your graph instead.
 4. **Hand it to your agent.** See [Use with your coding agent](#use-with-your-coding-agent).
@@ -192,15 +185,14 @@ The macOS and Linux commands were checked on macOS with Relate CLI 1.0.1. The Wi
 | Data | Location |
 |---|---|
 | Your graph | OPFS of the extension's origin (`opfs://linka-graph`), in your Chrome profile. Removing the extension removes it. If OPFS cannot be used, the side panel says the graph is kept in memory and disappears when closed. |
-| Seed and clip-recovery bookkeeping | `localStorage` of the extension's offscreen document |
-| Demo data | `seed/demo.json` → `seed/demo.cypher` (generated with `npm run seed`), bundled into the extension |
+| Clip-recovery bookkeeping | `localStorage` of the extension's offscreen document |
+| Demo data, for `data/linka.rl` and the tests | `seed/demo.json` → `seed/demo.cypher` (generated with `npm run seed`). Not in the extension |
 | Bundled store | `data/linka.rl`, built from `seed/demo.cypher` with `npm run store` |
-| Sample pages and their pre-extracted data | `public/samples/` |
 | Your export | `linka-export.cypher` and `linka.rl` in the project folder you chose, if you follow the steps above |
 
 ## The bundled store: `data/linka.rl`
 
-`data/linka.rl` (a single file of about 116 KB) holds the same graph the extension shows on first run (verified with Relate CLI 1.0.1: 15 `Page`, 29 `Concept`, 9 `Person`, 48 `Claim`; 90 `ABOUT`, 10 `ADDRESSES`, 48 `ASSERTS`, 9 `AUTHORED_BY`, 64 `MENTIONS`, 25 `RELATED_TO`). Always open it with `--read-only`: without it, even a read rewrites the file.
+`data/linka.rl` (a single file of about 116 KB) holds the demo graph from `seed/demo.cypher`, which the extension does not load (verified with Relate CLI 1.0.1: 15 `Page`, 29 `Concept`, 9 `Person`, 48 `Claim`; 90 `ABOUT`, 10 `ADDRESSES`, 48 `ASSERTS`, 9 `AUTHORED_BY`, 64 `MENTIONS`, 25 `RELATED_TO`). Always open it with `--read-only`: without it, even a read rewrites the file.
 
 ```sh
 export DO_NOT_TRACK=1
@@ -257,7 +249,7 @@ relate telemetry status
 
 - Extraction is an estimate by a small on-device model and can be wrong. There is no editor for the graph.
 - Suggested connections between pages can be wrong too. On 21 labeled pairs from the demo graph, Gemini Nano agreed on 13 and called about half of the unrelated pairs connected (measured on `dev.html` → **UC2 judge accuracy**).
-- No questions without Gemini Nano, and no fallback to a cloud model.
+- Clipping and questions need Gemini Nano; there is no fallback to a cloud model.
 - No sync between devices or with Neo4j / Aura; export is the way out.
 - Desktop Chrome 138+ only.
 
@@ -288,7 +280,7 @@ Timings of extraction, `ADDRESSES` judging and questions are logged in the offsc
 
 ### Relate features used
 
-- `@relate/relate-wasm` 1.0.1 in a dedicated worker: OPFS persistence (`RelateDb.open("opfs://…")`), in-memory fallback, `execute` with parameters, `executeScript` for the seed and Reset, and `isWasmTrap` to recreate the worker after a panic
+- `@relate/relate-wasm` 1.0.1 in a dedicated worker: OPFS persistence (`RelateDb.open("opfs://…")`), in-memory fallback, `execute` with parameters, `executeScript` for reading the whole graph and for **Clear graph**, and `isWasmTrap` to recreate the worker after a panic
 - Cypher: parameterized `MERGE`, multi-hop path queries for questions and cross-page connections
 - Relate CLI: `relate query` to build `data/linka.rl` and the exported store, `--read-only` queries
 - Relate MCP server: `relate serve --read-only --mcp stdio`, registered in Claude Code and Codex

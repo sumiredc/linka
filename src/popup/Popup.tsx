@@ -16,7 +16,6 @@ import type { RuntimeMessage } from "../shared/messages";
 import { onModelStatus } from "../shared/model";
 import { downloadModel, type ModelStatus, readModelStatus } from "../shared/model-status";
 import { languageModel } from "../shared/prompt-api";
-import { samplePageOf } from "../shared/sample-page";
 import { LinkaMark } from "../sidepanel/LinkaMark";
 import styles from "./Popup.module.css";
 import {
@@ -30,8 +29,6 @@ import {
 } from "./popup-state";
 
 type ActiveTab = { id: number; url: string; title: string };
-
-const EXTENSION_ROOT = chrome.runtime.getURL("");
 
 function unreachable(message: string): PopupAction {
   return { type: "blocked", reason: `Linka could not reach its graph: ${message}` };
@@ -50,9 +47,8 @@ async function check(tabRef: RefObject<ActiveTab | null>, dispatch: Dispatch<Pop
     dispatch({ type: "blocked", reason: "Linka cannot see the page in this tab." });
     return;
   }
-  const sample = samplePageOf(tab.url, EXTENSION_ROOT) !== null;
-  const unreadable = sample ? null : unreadableUrlReason(tab.url, true);
-  const pageUrl = pageUrlOf(tab.url, EXTENSION_ROOT);
+  const unreadable = unreadableUrlReason(tab.url, true);
+  const pageUrl = pageUrlOf(tab.url);
   if (unreadable !== null || pageUrl === null) {
     dispatch({ type: "blocked", reason: readFailureText(unreadable ?? "restricted") });
     return;
@@ -66,7 +62,7 @@ async function check(tabRef: RefObject<ActiveTab | null>, dispatch: Dispatch<Pop
   if (!clipped.ok) return dispatch(unreachable(clipped.error.message));
   dispatch({
     type: "checked",
-    page: { url: pageUrl, sample },
+    page: { url: pageUrl },
     current: current.value,
     clipped: clipped.value,
   });
@@ -89,22 +85,15 @@ async function prepareModel(dispatch: Dispatch<PopupAction>) {
   report(await downloadModel(api, report));
 }
 
-/** 本文を読み（同梱サンプルなら読まず）、offscreen document に記憶を頼む。吹き出しを閉じても記憶は続く */
+/** 本文を読み、offscreen document に記憶を頼む。吹き出しを閉じても記憶は続く */
 async function start(tab: ActiveTab, dispatch: Dispatch<PopupAction>) {
-  const sample = samplePageOf(tab.url, EXTENSION_ROOT);
-  let body: ClipBody;
-  let title = tab.title;
-  if (sample) {
-    body = { kind: "sample", page: sample };
-  } else {
-    const read = await readTab(tab.id);
-    if (!read.ok) {
-      dispatch({ type: "blocked", reason: readFailureText(read.reason, read.message) });
-      return;
-    }
-    body = { kind: "text", text: read.page.text };
-    title = read.page.title || title;
+  const read = await readTab(tab.id);
+  if (!read.ok) {
+    dispatch({ type: "blocked", reason: readFailureText(read.reason, read.message) });
+    return;
   }
+  const body: ClipBody = { kind: "text", text: read.page.text };
+  const title = read.page.title || tab.title;
   const response = await askClip({ kind: "clip", tabUrl: tab.url, title, body });
   dispatch({ type: "answered", response });
 }
@@ -192,7 +181,7 @@ function Body({
   tab: ActiveTab | null;
   dispatch: Dispatch<PopupAction>;
 }) {
-  const { view, page } = state;
+  const { view } = state;
   switch (view.kind) {
     case "checking":
       return <p className={styles.muted}>Checking this page…</p>;
@@ -203,7 +192,7 @@ function Body({
         <>
           <h1 className={styles.title}>Clipping this page…</h1>
           <ul className={styles.progress} aria-label={stageText(stage)}>
-            {progressSteps(stage, page?.sample ?? false).map((step) => (
+            {progressSteps(stage).map((step) => (
               <li key={step.label} data-state={step.state}>
                 {step.label}
               </li>

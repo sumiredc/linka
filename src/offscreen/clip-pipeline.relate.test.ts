@@ -1,6 +1,5 @@
 import type { RelateDb } from "@relate/relate-wasm";
 import { describe, expect, it, vi } from "vitest";
-import sampleJson from "../../public/samples/keep-offline-data.json?raw";
 import seed from "../../seed/demo.cypher?raw";
 import { CHUNK_MAX_CHARS } from "../shared/chunk-text";
 import { claimId } from "../shared/claim-id";
@@ -10,25 +9,20 @@ import type { Extraction } from "../shared/extraction";
 import { buildAddressesStatement, buildClipStatements } from "../shared/graph-statements";
 import { classifyExecute, failure } from "../shared/messages";
 import type { LanguageModelSession, LanguageModelStatic } from "../shared/prompt-api";
-import { samplePageOf } from "../shared/sample-page";
 import { openMemoryDb, run, runScript, runStatements } from "../shared/test/relate-node";
 import { ClipPipeline } from "./clip-pipeline";
 import type { ClipDb, PendingUndo, UndoJournal } from "./clip-undo";
+import { CLEAR_GRAPH_SCRIPT } from "./db-client";
 import { JUDGE_INSTRUCTIONS } from "./judge";
 
 // 記憶の処理本体を、本物の Relate（Node 上のメモリ DB）と偽の Prompt API で確かめる
 
-const ROOT = "chrome-extension://abcdefghijklmnop/";
 const PAGE = "https://relate.example/blog/graph-in-the-browser";
 const OTHER = "https://other.example/notes";
 const MDN_OPFS =
   "https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system";
 const MDN_CONCERN =
   "The synchronous OPFS file calls, such as those on a sync access handle, can run only inside web workers, not on the main thread.";
-
-const SAMPLE_TAB = `${ROOT}samples/keep-offline-data.html`;
-const SAMPLE_URL =
-  "https://github.com/sumiredc/linka/blob/main/public/samples/keep-offline-data.html";
 
 function extraction(fields: Partial<Extraction> = {}): Extraction {
   return { summary: "", concepts: [], authors: [], claims: [], relatedConcepts: [], ...fields };
@@ -218,14 +212,9 @@ function setup(
       db: conn,
       api: () => model,
       journal: j,
-      extensionRoot: ROOT,
       onEvent: (event) => events.push(event),
       now: () => new Date(Date.UTC(2026, 10, 15, 9, 0, clock++)).toISOString(),
       judge: { timeoutMs: options.judgeTimeoutMs ?? 1_000 },
-      fetchFile: async (url) =>
-        url === `${ROOT}samples/keep-offline-data.json`
-          ? new Response(sampleJson)
-          : new Response("", { status: 404 }),
     });
   return {
     db,
@@ -242,25 +231,19 @@ function setup(
 
 const text = (body = "Some article text."): ClipBody => ({ kind: "text", text: body });
 
-function sampleBody(): ClipBody {
-  const page = samplePageOf(SAMPLE_TAB, ROOT);
-  if (!page) throw new Error("not a sample page");
-  return { kind: "sample", page };
-}
-
 function expectFailure(result: ClipResult, kind: string) {
   expect(result).toMatchObject({ ok: false, error: { kind } });
 }
 
 describe("UC1 exception flows leave the graph unchanged", () => {
-  it("refuses a page that is not a sample when the Prompt API is missing", async () => {
+  it("refuses a page when the Prompt API is missing", async () => {
     const t = setup({ model: null });
     const before = dump(t.db);
     expectFailure(await t.pipeline.clip(PAGE, "T", text()), "unavailable");
     expect(dump(t.db)).toEqual(before);
   });
 
-  it("refuses a page that is not a sample when the model is unavailable", async () => {
+  it("refuses a page when the model is unavailable", async () => {
     const t = setup({ model: new FakeModel([], "unavailable") });
     const before = dump(t.db);
     expectFailure(await t.pipeline.clip(PAGE, "T", text()), "unavailable");
@@ -308,19 +291,6 @@ describe("UC1 exception flows leave the graph unchanged", () => {
     const t = setup({ model: new FakeModel([new Error("kErrorUnknown")]) });
     const before = dump(t.db);
     expectFailure(await t.pipeline.clip(PAGE, "T", text()), "prompt");
-    expect(dump(t.db)).toEqual(before);
-  });
-
-  it("fails when the sample's pre-extracted data cannot be read", async () => {
-    const t = setup({ model: null });
-    const before = dump(t.db);
-    const body = sampleBody();
-    if (body.kind !== "sample") throw new Error("unreachable");
-    const missing: ClipBody = {
-      kind: "sample",
-      page: { ...body.page, dataUrl: `${ROOT}samples/missing.json` },
-    };
-    expectFailure(await t.pipeline.clip(SAMPLE_TAB, "Sample", missing), "sample");
     expect(dump(t.db)).toEqual(before);
   });
 });
@@ -423,88 +393,6 @@ describe("clipping a page", () => {
       target: { url: PAGE, tabUrl: PAGE, title: "Graph" },
       result,
     });
-  });
-});
-
-describe("a sample page", () => {
-  it("clips from the pre-extracted data without Gemini Nano and links its ADDRESSES", async () => {
-    const t = setup({ model: null });
-    const result = await t.pipeline.clip(SAMPLE_TAB, "ignored", sampleBody());
-    expect(result).toMatchObject({
-      ok: true,
-      summary: { url: SAMPLE_URL, newPage: true, claims: 3 },
-    });
-    if (!result.ok) throw new Error("unreachable");
-    const { connections } = result.summary;
-    expect(connections.kind === "judged" && connections.links).toHaveLength(2);
-    const links = run(
-      t.db,
-      [
-        "MATCH (sp:Page)-[:ASSERTS]->(s:Claim)-[:ADDRESSES]->(c:Claim)<-[:ASSERTS]-(cp:Page)",
-        "WHERE sp.url = $url OR cp.url = $url",
-        "RETURN sp.url AS solution, cp.url AS concern",
-      ].join("\n"),
-      { url: SAMPLE_URL },
-    ).rows;
-    expect(links).toHaveLength(2);
-    expect(
-      run(t.db, "MATCH (p:Page {url: $url}) RETURN p.source AS s", { url: SAMPLE_URL }).rows,
-    ).toEqual([{ s: "sample" }]);
-  });
-
-  it("does not ask the model even when Gemini Nano is available", async () => {
-    const model = new FakeModel([answer(FIRST)]);
-    const t = setup({ model });
-    expect(await t.pipeline.clip(SAMPLE_TAB, "ignored", sampleBody())).toMatchObject({ ok: true });
-    expect(model.prompts).toBe(0);
-  });
-
-  it("skips the links whose other end is not in the graph", async () => {
-    const t = setup({ model: null, seeded: false });
-    expect(await t.pipeline.clip(SAMPLE_TAB, "ignored", sampleBody())).toMatchObject({
-      ok: true,
-      summary: { connections: { kind: "judged", links: [] } },
-    });
-  });
-
-  it("says the links were saved but not confirmed when they cannot be read back", async () => {
-    const t = setup({ model: null });
-    const original = t.conn.execute;
-    t.conn.execute = async (statement) =>
-      statement.query.includes("RETURN DISTINCT s.id AS solution")
-        ? failure("relate", "injected read failure")
-        : original(statement);
-    const result = await t.pipeline.clip(SAMPLE_TAB, "ignored", sampleBody());
-    expect(result).toMatchObject({
-      ok: true,
-      summary: {
-        connections: {
-          kind: "unconfirmed",
-          reason: expect.stringContaining("saved but could not be read"),
-        },
-      },
-    });
-    expect(
-      count(
-        t.db,
-        "MATCH (p:Page {url: $url})-[:ASSERTS]->(:Claim)-[r:ADDRESSES]-() RETURN count(r) AS n",
-        { url: SAMPLE_URL },
-      ),
-    ).toBe(2);
-  });
-
-  it("keeps the same ADDRESSES when clipped again", async () => {
-    const t = setup({ model: null });
-    await t.pipeline.clip(SAMPLE_TAB, "ignored", sampleBody());
-    const once = dump(t.db);
-    const again = await t.pipeline.clip(SAMPLE_TAB, "ignored", sampleBody());
-    expect(again).toMatchObject({ ok: true, summary: { newPage: false } });
-    if (!again.ok) throw new Error("unreachable");
-    const { connections } = again.summary;
-    expect(connections.kind === "judged" && connections.links).toHaveLength(2);
-    const strip = (rows: string[]) => rows.map((row) => row.replace(/"clippedAt":"[^"]*"/, ""));
-    expect(strip(dump(t.db).nodes)).toEqual(strip(once.nodes));
-    expect(strip(dump(t.db).rels)).toEqual(strip(once.rels));
   });
 });
 
@@ -708,15 +596,6 @@ describe("is this URL clipped?", () => {
     });
   });
 
-  it("maps a sample tab to its repository URL", async () => {
-    const t = setup({ model: null });
-    await t.pipeline.clip(SAMPLE_TAB, "ignored", sampleBody());
-    expect(await t.pipeline.isClipped(SAMPLE_TAB)).toMatchObject({
-      ok: true,
-      value: { url: SAMPLE_URL },
-    });
-  });
-
   it("answers no for a tab URL that is not a URL", async () => {
     const t = setup();
     expect(await t.pipeline.isClipped("")).toEqual({ ok: true, value: null });
@@ -790,14 +669,14 @@ describe("a write that fails partway", () => {
         }),
       }),
     );
-    // サンプルの事前抽出データは Claim だけが名指す Concept を分類なしで入れる
+    // Claim だけが名指す Concept は、分類なしで入る
     runStatements(
       t.db,
       buildClipStatements({
         url: OTHER,
         title: "Other",
         clippedAt: "2026-11-15T10:00:00Z",
-        source: "sample",
+        source: "page",
         extraction: extraction({
           claims: [{ statement: "Quota is shared.", type: "fact", concepts: ["Web storage"] }],
         }),
@@ -933,19 +812,15 @@ async function leaveUndo(t: ReturnType<typeof setup>) {
   t.conn.state.down = false;
 }
 
-/** Reset to demo data と同じく、グラフをすべて消してデモデータを入れ直す */
-function resetToDemo(t: ReturnType<typeof setup>) {
+/** Clear graph と同じく、グラフをすべて消す */
+function clearGraph(t: ReturnType<typeof setup>) {
   return async () => {
-    runScript(t.db, `MATCH (n) DETACH DELETE n;\n${seed}`);
+    runScript(t.db, CLEAR_GRAPH_SCRIPT);
     return { ok: true as const, value: [] };
   };
 }
 
-function demoDump() {
-  const db = openMemoryDb();
-  runScript(db, seed);
-  return dump(db);
-}
+const emptyDump = () => dump(openMemoryDb());
 
 describe("the undo of a clip being written", () => {
   it("is not run by an isClipped asked in the middle of the write", async () => {
@@ -965,18 +840,18 @@ describe("the undo of a clip being written", () => {
   });
 });
 
-describe("replacing the whole graph", () => {
-  it("drops an undo read from the graph it replaces", async () => {
+describe("clearing the whole graph", () => {
+  it("drops an undo read from the graph it clears", async () => {
     // 空のグラフで書きかけになったので、取り消しは opfs などの Concept を「新しく入れたもの」として消す
     const t = setup({ model: new FakeModel([answer(FIRST)]), seeded: false });
     await leaveUndo(t);
-    expect(await t.pipeline.replaceGraph(resetToDemo(t))).toMatchObject({ ok: true });
+    expect(await t.pipeline.replaceGraph(clearGraph(t))).toMatchObject({ ok: true });
     expect(t.journal.value).toBeNull();
     expect(await t.restart().isClipped(PAGE)).toEqual({ ok: true, value: null });
-    expect(dump(t.db)).toEqual(demoDump());
+    expect(dump(t.db)).toEqual(emptyDump());
   });
 
-  it("waits for an undo that is running before it replaces the graph", async () => {
+  it("waits for an undo that is running before it clears the graph", async () => {
     const t = setup({ model: new FakeModel([answer(FIRST)]), seeded: false });
     await leaveUndo(t);
     let release = () => {};
@@ -991,12 +866,12 @@ describe("replacing the whole graph", () => {
     };
     const restarted = t.restart();
     await vi.waitFor(() => expect(holding).toBe(true));
-    const reset = restarted.replaceGraph(resetToDemo(t));
+    const reset = restarted.replaceGraph(clearGraph(t));
     release();
     expect(await reset).toMatchObject({ ok: true });
     // 取り消しが走り終わるのを待ってから見る
     await restarted.isClipped(PAGE);
-    expect(dump(t.db)).toEqual(demoDump());
+    expect(dump(t.db)).toEqual(emptyDump());
   });
 
   it("is refused while a page is being clipped", async () => {

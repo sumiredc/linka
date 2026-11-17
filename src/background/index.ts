@@ -68,7 +68,6 @@ async function setBadge(tabId: number, badge: Badge): Promise<void> {
 }
 
 const refreshBadge = createBadgeRefresher({
-  extensionRoot: EXTENSION_ROOT,
   isClipped: (tabUrl) => askClip({ kind: "isClipped", tabUrl }),
   setBadge,
 });
@@ -90,7 +89,7 @@ function refreshTabs(pageUrl: string | null): void {
       const targets =
         pageUrl === null
           ? tabs.flatMap(({ id, url }) => (id === undefined ? [] : [{ id, url }]))
-          : tabsShowing(tabs, pageUrl, EXTENSION_ROOT);
+          : tabsShowing(tabs, pageUrl);
       for (const tab of targets) void refreshBadge(tab.id, tab.url);
     },
     () => {},

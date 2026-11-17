@@ -8,10 +8,8 @@ import {
   type DbResponse,
   type DbResultOf,
   failure,
-  type RelateResult,
   type StorageState,
 } from "../shared/messages";
-import { EMPTINESS_QUERY, resetScript, type SeedProgressStore, seedPlan, shouldSeed } from "./seed";
 import type { WorkerOp, WorkerRequest, WorkerResponse } from "./worker-protocol";
 
 export type WorkerPort = { post(request: WorkerRequest): void; terminate(): void };
@@ -35,10 +33,6 @@ export type DbClientOptions = {
   lockRetry?: { attempts: number; delayMs: number };
   onNotify?(notification: DbNotification): void;
   timers?: Timers;
-  /** 空の DB を開いたときに入れ、`resetToDemo` で入れ直す Cypher スクリプト（`seed/demo.cypher`） */
-  seed?: string;
-  /** OPFS のストアへの投入の進み具合を、グラフの外に残す先 */
-  seedProgress?: SeedProgressStore;
 };
 
 type DbOp = Exclude<DbRequest, { kind: "status" }>;
@@ -121,21 +115,12 @@ export class DbClient {
   private async run(job: Job): Promise<void> {
     let op: WorkerOp;
     try {
-      op = toWorkerOp(job.request, this.options.seed);
+      op = toWorkerOp(job.request);
     } catch (error) {
       job.resolve(failure("exception", messageOf(error)));
       return;
     }
-    // メモリ上の DB は開くたびに入れ直すので、進み具合は OPFS のストアの分だけ残す
-    const progress =
-      job.request.kind === "resetToDemo" && this.storage.kind === "opfs"
-        ? this.options.seedProgress
-        : undefined;
-    progress?.set("pending");
     const outcome = await this.call(op);
-    // 最後まで流れたなら、Relate のエラーで途中までしか入らなくても pending にしない。
-    // 残すと次に開くたびに消して入れ直し、その間に記憶したページも消える。直すのは利用者の Reset に任せる
-    if (!isLost(outcome)) progress?.set("done");
     if (outcome.kind === "response" && outcome.response.ok) {
       try {
         const value = outcome.response.value ?? [];
@@ -208,41 +193,13 @@ export class DbClient {
   private async openIn(mode: "opfs" | "memory"): Promise<OpenFailure | null> {
     if (!this.worker) this.spawn();
     const outcome = await this.call({ op: "open", mode, uri: this.options.uri });
-    if (outcome.kind === "response" && outcome.response.ok) return this.seed(mode);
+    if (outcome.kind === "response" && outcome.response.ok) return null;
     const reason = describeLoss(outcome)[1];
     if (outcome.kind === "response" && !outcome.response.ok && !outcome.response.trap) {
       // 開くのに失敗しただけなので worker はそのまま使える
       return { reason, cause: /storage locked/i.test(reason) ? "locked" : "refused" };
     }
     return this.lostWhileOpening(outcome);
-  }
-
-  /** 開いた直後、待っている依頼より先にデモデータを入れる。メモリ上の DB は開くたびに空なので毎回入る */
-  private async seed(mode: "opfs" | "memory"): Promise<OpenFailure | null> {
-    const seed = this.options.seed;
-    if (seed === undefined) return null;
-    const progress = mode === "opfs" ? this.options.seedProgress : undefined;
-    const plan = seedPlan(progress?.get() ?? null);
-    if (plan === "none") return null;
-    if (plan === "ifEmpty") {
-      const check = await this.call({ op: "execute", query: EMPTINESS_QUERY, params: null });
-      if (isLost(check)) return this.lostWhileOpening(check);
-      const checked = classifyCheck(check);
-      if (!shouldSeed(checked)) {
-        // 記録の無いまま中身のあるストアは、投入の要らない利用者のグラフとして扱う
-        if (checked.ok) progress?.set("done");
-        return null;
-      }
-    }
-    progress?.set("pending");
-    const script = plan === "finish" ? resetScript(seed) : seed;
-    const seeded = await this.call({ op: "executeScript", script, params: null });
-    if (isLost(seeded)) return this.lostWhileOpening(seeded);
-    // Relate のエラーで途中までしか入らなくても DB は使えるので開けたことにする。
-    // pending のままにすると次に開くたびに消して入れ直すので、直すのは利用者の Reset に任せる
-    progress?.set("done");
-    this.notify({ type: "graphChanged" });
-    return null;
   }
 
   private lostWhileOpening(outcome: Outcome): OpenFailure {
@@ -321,33 +278,17 @@ export class DbClient {
   }
 }
 
-function toWorkerOp(request: DbOp, seed: string | undefined): WorkerOp {
-  if (request.kind === "resetToDemo") {
-    if (seed === undefined) throw new Error("no demo data is bundled to reset to");
-    return { op: "executeScript", script: resetScript(seed), params: null };
+/** Clear graph で流す文。ノードを消すと、つながっていた関係も消える */
+export const CLEAR_GRAPH_SCRIPT = "MATCH (n) DETACH DELETE n;";
+
+function toWorkerOp(request: DbOp): WorkerOp {
+  if (request.kind === "clearGraph") {
+    return { op: "executeScript", script: CLEAR_GRAPH_SCRIPT, params: null };
   }
   const params = request.params ? JSON.stringify(request.params) : null;
   return request.kind === "execute"
     ? { op: "execute", query: request.query, params }
     : { op: "executeScript", script: request.script, params };
-}
-
-/** 時間切れ・trap・worker が落ちた、のどれか。worker は作り直すしかない */
-function isLost(outcome: Outcome): boolean {
-  return outcome.kind !== "response" || (!outcome.response.ok && outcome.response.trap);
-}
-
-function classifyCheck(outcome: Outcome): DbResponse<RelateResult> {
-  if (outcome.kind !== "response" || !outcome.response.ok) {
-    return failure(...describeLoss(outcome));
-  }
-  const { value } = outcome.response;
-  if (typeof value !== "string") return failure("exception", "unexpected response");
-  try {
-    return classifyExecute(value);
-  } catch (error) {
-    return failure("exception", messageOf(error));
-  }
 }
 
 function describeLoss(outcome: Outcome): [DbFailureKind, string] {

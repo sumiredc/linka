@@ -15,7 +15,7 @@ import {
 } from "./popup-state";
 
 const PAGE_URL = "https://example.com/a";
-const page: PopupPage = { url: PAGE_URL, sample: false };
+const page: PopupPage = { url: PAGE_URL };
 const thisPage: ClipTarget = { url: PAGE_URL, tabUrl: PAGE_URL, title: "Page A" };
 const otherPage: ClipTarget = {
   url: "https://example.com/b",
@@ -55,13 +55,6 @@ describe("popupReducer: opening the popup", () => {
     expect(at(run(checked()))).toEqual({ kind: "starting" });
   });
 
-  it("starts clipping a sample page even when Gemini Nano is not available", () => {
-    const state = run(
-      checked({ page: { ...page, sample: true }, model: { kind: "unavailable", reason: "r" } }),
-    );
-    expect(at(state)).toEqual({ kind: "starting" });
-  });
-
   it("offers to clip again on a page that is already clipped", () => {
     const state = run(checked({ clipped: { url: PAGE_URL, clippedAt: "2026-11-15T00:00:00Z" } }));
     expect(at(state)).toEqual({ kind: "alreadyClipped", clippedAt: "2026-11-15T00:00:00Z" });
@@ -77,7 +70,7 @@ describe("popupReducer: opening the popup", () => {
     expect(at(state)).toEqual({ kind: "busy", clipping: otherPage, finished: false });
   });
 
-  it("gives the reason when Gemini Nano is not available on a page that is not a sample", () => {
+  it("gives the reason when Gemini Nano is not available", () => {
     const view = at(run(checked({ model: { kind: "unavailable", reason: "no GPU" } })));
     expect(view.kind).toBe("cannotClip");
     expect(view.kind === "cannotClip" && view.reason).toContain("no GPU");
@@ -314,7 +307,7 @@ describe("popupReducer: another clip in progress", () => {
 
 describe("progressSteps", () => {
   it("marks the steps before the current one as done", () => {
-    expect(progressSteps({ kind: "extracting", part: 1, parts: 2 }, false)).toEqual([
+    expect(progressSteps({ kind: "extracting", part: 1, parts: 2 })).toEqual([
       { label: "Read the page", state: "done" },
       { label: "Extract concepts and claims (part 1 of 2)", state: "now" },
       { label: "Save to the graph", state: "todo" },
@@ -323,18 +316,11 @@ describe("progressSteps", () => {
   });
 
   it("counts the pairs while finding connections after saving", () => {
-    expect(progressSteps({ kind: "connecting", pair: 2, pairs: 5 }, false)).toEqual([
+    expect(progressSteps({ kind: "connecting", pair: 2, pairs: 5 })).toEqual([
       { label: "Read the page", state: "done" },
       { label: "Extract concepts and claims", state: "done" },
       { label: "Save to the graph", state: "done" },
       { label: "Find connections to other pages (2 of 5)", state: "now" },
-    ]);
-  });
-
-  it("skips extraction for a sample page", () => {
-    expect(progressSteps({ kind: "writing" }, true)).toEqual([
-      { label: "Load the bundled sample data", state: "done" },
-      { label: "Save to the graph", state: "now" },
     ]);
   });
 });

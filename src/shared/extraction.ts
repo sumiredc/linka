@@ -8,7 +8,7 @@ export const ClaimTypeSchema = z.enum(CLAIM_TYPES);
 export type ClaimType = z.infer<typeof ClaimTypeSchema>;
 
 /** Page と Claim の由来。`selection` の Claim だけは再クリップでも残す。 */
-export const CLIP_SOURCES = ["page", "selection", "sample"] as const;
+export const CLIP_SOURCES = ["page", "selection"] as const;
 export const ClipSourceSchema = z.enum(CLIP_SOURCES);
 export type ClipSource = z.infer<typeof ClipSourceSchema>;
 

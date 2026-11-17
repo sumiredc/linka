@@ -1,5 +1,4 @@
 // DB の唯一の持ち主。画面から直接届いた依頼を Relate の worker に渡し、DB の変化を全画面に知らせる
-import demoCypher from "../../seed/demo.cypher?raw";
 import type { ClipRequest } from "../shared/clip-status";
 import {
   type CypherParams,
@@ -16,7 +15,6 @@ import { ClipPipeline } from "./clip-pipeline";
 import { storedUndoJournal } from "./clip-undo";
 import { DbClient } from "./db-client";
 import { ModelTracker } from "./model-tracker";
-import { storedSeedProgress } from "./seed";
 import type { WorkerResponse } from "./worker-protocol";
 
 // execute は止められないので、これを超えたら worker ごと作り直す
@@ -27,9 +25,6 @@ const client = new DbClient({
   timeoutMs: REQUEST_TIMEOUT_MS,
   // Playwright の Chromium では terminate から約 2 秒でロックが外れた。余裕を見て 10 秒まで待つ
   lockRetry: { attempts: 40, delayMs: 250 },
-  // CLI が data/linka.rl を作るのと同じファイルを、文字列としてバンドルに含める
-  seed: demoCypher,
-  seedProgress: storedSeedProgress(localStorage),
   createWorker: ({ onMessage, onError }) => {
     const worker = new Worker(new URL("./relate.worker.ts", import.meta.url), { type: "module" });
     worker.onmessage = (event: MessageEvent<WorkerResponse>) => onMessage(event.data);
@@ -67,7 +62,6 @@ const clips = new ClipPipeline({
   },
   api: languageModel,
   journal: storedUndoJournal(localStorage),
-  extensionRoot: chrome.runtime.getURL(""),
   onEvent: (event) => {
     const message: RuntimeMessage = { target: "ui", type: "clip", event };
     chrome.runtime.sendMessage(message).catch(() => {});
@@ -102,7 +96,7 @@ function handleClip(request: ClipRequest): Promise<DbResponse> {
 // execute は開発用のコンソールからしか書き込まないので通さない。記憶と同時に書くと混ざりうるが、開発用なので許す
 function handleDb(request: DbRequest): Promise<DbResponse> {
   switch (request.kind) {
-    case "resetToDemo":
+    case "clearGraph":
       return clips.replaceGraph(() => client.request(request));
     case "executeScript":
       return clips.runScript(() => client.request(request));

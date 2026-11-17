@@ -9,8 +9,8 @@ export type CypherParams = Record<string, unknown>;
 export type DbRequest =
   | { kind: "execute"; query: string; params?: CypherParams }
   | { kind: "executeScript"; script: string; params?: CypherParams }
-  /** Reset to demo data。グラフをすべて消してから、同梱のデモデータを入れ直す */
-  | { kind: "resetToDemo" }
+  /** Clear graph。すべてのノードと関係を消す */
+  | { kind: "clearGraph" }
   | { kind: "status" };
 
 /** Relate の結果（wire envelope）のうち、画面が使う部分 */
@@ -40,7 +40,7 @@ export type DbFailureKind =
   | "unavailable"
   /** offscreen document を用意できなかった、または依頼が届かなかった */
   | "unreachable"
-  /** ページの記憶の最中なので、グラフを置き換える依頼（Reset to demo data）を実行せずに断った */
+  /** ページの記憶の最中なので、グラフを消す依頼（Clear graph）を実行せずに断った */
   | "busy";
 
 export type DbFailure = { ok: false; error: { kind: DbFailureKind; message: string } };
@@ -49,7 +49,7 @@ export type DbResponse<T = unknown> = { ok: true; value: T } | DbFailure;
 
 export type DbResultOf<R extends DbRequest> = R extends { kind: "execute" }
   ? RelateResult
-  : R extends { kind: "executeScript" } | { kind: "resetToDemo" }
+  : R extends { kind: "executeScript" } | { kind: "clearGraph" }
     ? RelateResult[]
     : StorageState;
 

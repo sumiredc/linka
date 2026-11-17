@@ -18,7 +18,7 @@ Pages connect through shared concepts. More importantly, when a page you clip pr
 
 In the side panel you can browse the graph, ask it questions in plain English ("Which solutions address concerns about offline support?"), and see the Cypher that answered and the path highlighted in the graph. When you are ready to build, export the graph, turn it into a single-file Relate store with the Relate CLI, and register `relate serve --read-only --mcp stdio` with Claude Code or Codex. Your agent then plans with the concerns and solutions you researched.
 
-It works out of the box: the first run shows a demo graph of 15 research pages, and three bundled sample pages can be clipped even where Gemini Nano is not available. The same demo graph ships as `data/linka.rl`, so you can inspect the persisted store with the Relate CLI without installing anything in Chrome.
+Linka starts with an empty graph, so it holds only the pages you chose to clip. A demo graph of 15 research pages ships separately as `data/linka.rl`, so you can inspect a persisted Relate store with the Relate CLI without installing anything in Chrome.
 
 ## Why it is useful
 

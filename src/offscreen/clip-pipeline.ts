@@ -1,7 +1,6 @@
-// 記憶（UC1）の処理本体。本文の抽出（またはサンプルの事前抽出データ）からグラフへの書き込みまでを offscreen document で行う
+// 記憶（UC1）の処理本体。本文の抽出からグラフへの書き込みまでを offscreen document で行う
 import { unreadableUrlReason } from "../content/unreadable-url";
 import { chunkText } from "../shared/chunk-text";
-import { claimId } from "../shared/claim-id";
 import type {
   ClipBody,
   ClipEvent,
@@ -12,17 +11,14 @@ import type {
   ClipStage,
   ClipTarget,
   ConnectionsOutcome,
-  NewConnection,
 } from "../shared/clip-status";
 import { pageUrlOf } from "../shared/clip-status";
 import type { CypherStatement } from "../shared/cypher";
 import type { Clip } from "../shared/extraction";
 import {
-  type AddressesLink,
   buildAddressesCandidatesStatement,
   buildAddressesStatement,
   buildClipStatements,
-  buildConnectionsStatement,
   buildReclipStatements,
   buildRemoveAddressesStatement,
   clipRows,
@@ -30,7 +26,6 @@ import {
 } from "../shared/graph-statements";
 import { type DbResponse, failure, type RelateResult } from "../shared/messages";
 import type { LanguageModelStatic } from "../shared/prompt-api";
-import { loadSample } from "../shared/sample-page";
 import { normalizeUrl } from "../shared/url";
 import { buildUndoStatements, type ClipDb, readSnapshot, type UndoJournal } from "./clip-undo";
 import { type ExtractOptions, extractPage } from "./extract";
@@ -43,20 +38,11 @@ export type ClipPipelineOptions = {
   db: ClipDb;
   api(): LanguageModelStatic | null;
   journal: UndoJournal;
-  /** 拡張機能のルートの URL（`chrome-extension://<id>/`）。サンプルページの見分けに使う */
-  extensionRoot: string;
   onEvent(event: ClipEvent): void;
   now?(): string;
-  fetchFile?(url: string): Promise<Response>;
   extract?: Omit<ExtractOptions, "onPart">;
   judge?: Omit<JudgeOptions, "onPair">;
 };
-
-/**
- * `addresses` はサンプルの事前抽出データの組で、記憶の書き込みと一緒に張る。
- * null なら、書き込みのあとで Nano につながりを判定させる（UC2）
- */
-type Prepared = { clip: Clip; addresses: AddressesLink[] | null };
 
 class StepFailure extends Error {
   constructor(readonly failure: ClipFailure) {
@@ -103,7 +89,7 @@ export class ClipPipeline {
   }
 
   async isClipped(tabUrl: string): Promise<DbResponse<ClippedPage | null>> {
-    const url = pageUrlOf(tabUrl, this.options.extensionRoot);
+    const url = pageUrlOf(tabUrl);
     if (url === null) return { ok: true, value: null };
     // 書きかけのページを記憶済みと答えないよう、取り消しが残っていれば先に済ませる
     await this.#undoPending();
@@ -121,7 +107,7 @@ export class ClipPipeline {
   async clip(tabUrl: string, title: string, body: ClipBody): Promise<ClipResult> {
     let url: string;
     try {
-      url = body.kind === "sample" ? body.page.url : normalizeUrl(tabUrl);
+      url = normalizeUrl(tabUrl);
     } catch {
       return { ok: false, error: { kind: "invalidUrl", message: `not a URL: ${tabUrl}` } };
     }
@@ -158,16 +144,16 @@ export class ClipPipeline {
   }
 
   async #run(target: ClipTarget, body: ClipBody): Promise<ClipResult> {
-    let prepared: Prepared;
+    let clip: Clip;
     try {
-      prepared = await this.#prepare(target, body);
+      clip = await this.#prepare(target, body);
     } catch (error) {
       if (error instanceof StepFailure) return { ok: false, error: error.failure };
       throw error;
     }
     this.#setStage(target, { kind: "writing" });
-    const written = await this.#write(prepared);
-    if (!written.ok || prepared.addresses !== null) return written;
+    const written = await this.#write(clip);
+    if (!written.ok) return written;
     // UC1 の書き込みが済んでから判定する。ここで何が起きても、UC1 で入れた内容は戻さない
     const connections = await this.#connect(target, written.summary.url);
     return { ok: true, summary: { ...written.summary, connections } };
@@ -213,23 +199,8 @@ export class ClipPipeline {
     }
   }
 
-  async #prepare(target: ClipTarget, body: ClipBody): Promise<Prepared> {
+  async #prepare(target: ClipTarget, body: ClipBody): Promise<Clip> {
     const clippedAt = this.options.now?.() ?? new Date().toISOString();
-    if (body.kind === "sample") {
-      let loaded: Awaited<ReturnType<typeof loadSample>>;
-      try {
-        loaded = await loadSample(body.page, clippedAt, this.options.fetchFile);
-      } catch (error) {
-        throw new StepFailure({ kind: "sample", message: messageOf(error) });
-      }
-      // 事前抽出データの組は、ストアに今ある Claim に対してだけ張る（Reset 後などで相手が無ければ黙って飛ばす）
-      const addresses = loaded.addresses.map(({ solution, concern }) => ({
-        solution: claimId(solution.page, solution.statement),
-        concern: claimId(concern.page, concern.statement),
-      }));
-      return { clip: loaded.clip, addresses };
-    }
-
     if (unreadableUrlReason(target.tabUrl, true) !== null) {
       throw new StepFailure({
         kind: "unreadable",
@@ -245,16 +216,13 @@ export class ClipPipeline {
       },
     );
     if (!extracted.ok) throw new StepFailure(extracted.error);
+    // ページをまたぐつながりの判定（UC2）はここではしない
     return {
-      clip: {
-        url: target.url,
-        title: target.title,
-        clippedAt,
-        source: "page",
-        extraction: extracted.extraction,
-      },
-      // ページをまたぐつながりの判定（UC2）はここではしない
-      addresses: null,
+      url: target.url,
+      title: target.title,
+      clippedAt,
+      source: "page",
+      extraction: extracted.extraction,
     };
   }
 
@@ -262,7 +230,7 @@ export class ClipPipeline {
    * 書く前に触れうる部分を読み、取り消しの文を先に残してから書く。
    * 途中で失敗したら取り消しの文を流し、記憶の前のグラフに戻す
    */
-  async #write({ clip, addresses }: Prepared): Promise<ClipResult> {
+  async #write(clip: Clip): Promise<ClipResult> {
     if (!(await this.#undoPending())) {
       return writeFailure("an earlier clip that failed could not be undone yet", false);
     }
@@ -296,14 +264,9 @@ export class ClipPipeline {
         const response = await this.#db.execute(statement);
         if (!response.ok) return await this.#undo(undo, dbError(response));
       }
-      // サンプル以外では、#run が書き込みのあとの判定（UC2）の結果で置き換える
-      let connections: ConnectionsOutcome = notJudged("not judged yet");
-      if (addresses) {
-        const response = await this.#db.execute(buildAddressesStatement(addresses));
-        if (!response.ok) return await this.#undo(undo, dbError(response));
-        connections = await this.#readConnections(addresses);
-      }
       this.options.journal.clear();
+      // #run が、書き込みのあとの判定（UC2）の結果で置き換える
+      const connections: ConnectionsOutcome = notJudged("not judged yet");
       return {
         ok: true,
         summary: {
@@ -319,20 +282,6 @@ export class ClipPipeline {
     } finally {
       this.#writing = false;
     }
-  }
-
-  /** 与えた組のうち ADDRESSES が張られたものを、両端の文とページとともに読む */
-  async #readConnections(links: AddressesLink[]): Promise<ConnectionsOutcome> {
-    if (links.length === 0) return { kind: "judged", links: [] };
-    const response = await this.#db.execute(buildConnectionsStatement(links));
-    if (!response.ok) {
-      // 書いたあとなので「判定しなかった」ではない。張れたかどうかを確かめられなかった
-      return unconfirmed(`the connections were saved but could not be read: ${dbError(response)}`);
-    }
-    const read: NewConnection[] = toAddressesCandidates(response.value.rows).map(
-      ({ solution, concern }) => ({ solution, concern }),
-    );
-    return { kind: "judged", links: read };
   }
 
   async #undo(statements: CypherStatement[], reason: string): Promise<ClipResult> {
@@ -360,12 +309,12 @@ export class ClipPipeline {
   }
 
   /**
-   * グラフをまるごと置き換える依頼（Reset to demo data）を流す。記憶の最中は断る。
-   * 取り消しの記録は読んだときのグラフにだけ使えるので、置き換える前に捨てる。
+   * グラフをまるごと消す依頼（Clear graph）を流す。記憶の最中は断る。
+   * 取り消しの記録は読んだときのグラフにだけ使えるので、消す前に捨てる。
    * 流し終えられない取り消しが記憶を止め続けたときの逃げ道にもなる
    */
   async replaceGraph<T>(run: () => Promise<DbResponse<T>>): Promise<DbResponse<T>> {
-    // 流している途中の取り消しが、置き換えたあとのグラフに混ざらないよう終わるのを待つ
+    // 流している途中の取り消しが、消したあとのグラフに混ざらないよう終わるのを待つ
     await this.#recovery;
     const running = this.#current;
     if (running) {

@@ -15,9 +15,6 @@ import {
 } from "./badge";
 
 const ROOT = "chrome-extension://abc/";
-const SAMPLE_TAB = `${ROOT}samples/sqlite-worker-owner.html`;
-const SAMPLE_PAGE =
-  "https://github.com/sumiredc/linka/blob/main/public/samples/sqlite-worker-owner.html";
 
 const clipped: DbResponse<ClippedPage | null> = {
   ok: true,
@@ -35,19 +32,15 @@ function deferred<T>() {
 
 describe("canBeClipped", () => {
   it("asks about web pages and file pages", () => {
-    expect(canBeClipped("https://example.com/a", ROOT)).toBe(true);
-    expect(canBeClipped("file:///Users/me/a.html", ROOT)).toBe(true);
-  });
-
-  it("asks about the bundled sample pages", () => {
-    expect(canBeClipped(SAMPLE_TAB, ROOT)).toBe(true);
+    expect(canBeClipped("https://example.com/a")).toBe(true);
+    expect(canBeClipped("file:///Users/me/a.html")).toBe(true);
   });
 
   it("does not ask about pages that cannot be clipped", () => {
-    expect(canBeClipped("chrome://newtab/", ROOT)).toBe(false);
-    expect(canBeClipped(`${ROOT}sidepanel.html`, ROOT)).toBe(false);
-    expect(canBeClipped("https://chromewebstore.google.com/detail/x", ROOT)).toBe(false);
-    expect(canBeClipped("", ROOT)).toBe(false);
+    expect(canBeClipped("chrome://newtab/")).toBe(false);
+    expect(canBeClipped(`${ROOT}sidepanel.html`)).toBe(false);
+    expect(canBeClipped("https://chromewebstore.google.com/detail/x")).toBe(false);
+    expect(canBeClipped("")).toBe(false);
   });
 });
 
@@ -89,13 +82,7 @@ describe("tabsShowing", () => {
       { id: 4 },
       { url: "https://example.com/a" },
     ];
-    expect(tabsShowing(tabs, "https://example.com/a", ROOT).map((tab) => tab.id)).toEqual([1, 3]);
-  });
-
-  it("matches a sample page by its repository URL", () => {
-    expect(tabsShowing([{ id: 5, url: SAMPLE_TAB }], SAMPLE_PAGE, ROOT)).toEqual([
-      { id: 5, url: SAMPLE_TAB },
-    ]);
+    expect(tabsShowing(tabs, "https://example.com/a").map((tab) => tab.id)).toEqual([1, 3]);
   });
 });
 
@@ -104,7 +91,6 @@ describe("createBadgeRefresher", () => {
     const badges: [number, Badge][] = [];
     const ask = vi.fn(isClipped);
     const refresh = createBadgeRefresher({
-      extensionRoot: ROOT,
       isClipped: ask,
       setBadge: async (tabId, badge) => {
         badges.push([tabId, badge]);

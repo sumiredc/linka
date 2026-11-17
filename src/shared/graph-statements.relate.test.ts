@@ -7,7 +7,6 @@ import {
   buildAddressesCandidatesStatement,
   buildAddressesStatement,
   buildClipStatements,
-  buildConnectionsStatement,
   buildReclipStatements,
   buildRemoveAddressesStatement,
   CANDIDATE_LIMITS,
@@ -356,18 +355,6 @@ describe("buildReclipStatements on Relate", () => {
     expect([after.Concept, after.Person]).toEqual([before.Concept, before.Person]);
   });
 
-  it("also removes sample claims, which stand in for a whole-page extraction", () => {
-    const db = openMemoryDb();
-    runStatements(
-      db,
-      buildClipStatements(
-        clip(WASM_URL, "sample", { claims: [{ statement: "S.", type: "fact", concepts: [] }] }),
-      ),
-    );
-    reclip(db);
-    expect(claimSources(db, WASM_URL)).toEqual({ "Wasm memory is capped.": "page" });
-  });
-
   it("gives the same result through executeScript with embedded values", () => {
     const parameterized = seededDb();
     reclip(parameterized);
@@ -599,7 +586,7 @@ describe("buildAddressesCandidatesStatement on Relate", () => {
   });
 });
 
-describe("buildConnectionsStatement and buildRemoveAddressesStatement on Relate", () => {
+describe("buildRemoveAddressesStatement on Relate", () => {
   const concern = claimId(WASM_URL, "32-bit Wasm linear memory is capped at 4GB per instance.");
   const solution = claimId(OPFS_URL, "Memory64 lifts the 4GB cap.");
   const other = claimId(WASM_URL, "An in-memory graph must fit its indexes in that budget.");
@@ -611,31 +598,6 @@ describe("buildConnectionsStatement and buildRemoveAddressesStatement on Relate"
     runStatements(d, [buildAddressesStatement([{ solution, concern }])]);
     return d;
   }
-
-  it("reads only the given pairs that have ADDRESSES, with their statements and pages", () => {
-    const d = db();
-    const statement = buildConnectionsStatement([
-      { solution, concern },
-      { solution, concern: other },
-    ]);
-    expect(toAddressesCandidates(run(d, statement.query, statement.params).rows)).toEqual([
-      {
-        solution: {
-          id: solution,
-          statement: "Memory64 lifts the 4GB cap.",
-          pageUrl: OPFS_URL,
-          pageTitle: `Title of ${OPFS_URL}`,
-        },
-        concern: {
-          id: concern,
-          statement: "32-bit Wasm linear memory is capped at 4GB per instance.",
-          pageUrl: WASM_URL,
-          pageTitle: `Title of ${WASM_URL}?utm_source=feed#top`,
-        },
-        concepts: [],
-      },
-    ]);
-  });
 
   it("removes only the given ADDRESSES", () => {
     const d = db();
