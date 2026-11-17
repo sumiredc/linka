@@ -2,15 +2,19 @@
 
 Text to paste into the Devpost submission. Facts about setup and usage live in the [README](../README.md); this file is only the pitch.
 
-## Tagline
+## Elevator pitch
 
-Clip what you read in Chrome into a local knowledge graph — then hand that context to your coding agent.
+Build a knowledge graph from the pages you read, right in Chrome. Ask it questions, then hand it to Claude Code or Codex over MCP. Runs on-device with Gemini Nano and Relate.
+
+## Thumbnail
+
+[`assets/thumbnail-devpost.png`](../assets/thumbnail-devpost.png) (1500×1000, the 3:2 ratio Devpost recommends)
 
 ## Demo video
 
 https://youtu.be/ZYyIQFN0fSY (1:43)
 
-Thumbnail: [`assets/thumbnail.png`](../assets/thumbnail.png) (1280×720, also used on YouTube)
+Thumbnail on YouTube: [`assets/thumbnail.png`](../assets/thumbnail.png) (1280×720)
 
 ## What it does
 
