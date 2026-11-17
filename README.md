@@ -10,8 +10,6 @@ Built for the Relate by Neo4j Hackathon. MIT licensed.
 
 Demo video (1:43): https://youtu.be/ZYyIQFN0fSY
 
-Devpost: https://devpost.com/software/linka-on2dqh
-
 ## Use case
 
 When you compare articles, docs and issues to choose a technology, you keep track of "which page raised this concern, and which page had the fix" in tabs, notes and memory. Close the tabs and that mapping is gone; later you reread the same pages to explain a decision or to brief a coding agent.
