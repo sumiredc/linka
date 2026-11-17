@@ -187,7 +187,7 @@ export function buildClipStatements(input: Clip): CypherStatement[] {
 }
 
 /**
- * 再クリップの前に流す文。そのページ全体から抽出した Claim（`page` と `sample`）と、
+ * 再クリップの前に流す文。そのページ全体から抽出した Claim（`page`）と、
  * それに付いた ABOUT・ADDRESSES、ページの MENTIONS・AUTHORED_BY を消す。
  * 選択範囲から足した Claim と、他のページも参照しうる Concept・Person は残し、
  * 残した Claim が ABOUT で指す Concept への MENTIONS は張り直す。
@@ -291,7 +291,7 @@ function connectionEnd(
   return { id, statement, pageUrl, pageTitle: typeof pageTitle === "string" ? pageTitle : pageUrl };
 }
 
-/** {@link buildAddressesCandidatesStatement} と {@link buildConnectionsStatement} の行を組にする。形の違う行は飛ばす */
+/** {@link buildAddressesCandidatesStatement} の行を組にする。形の違う行は飛ばす */
 export function toAddressesCandidates(
   rows: readonly Record<string, unknown>[],
 ): AddressesCandidate[] {
@@ -304,18 +304,6 @@ export function toAddressesCandidates(
       : [];
     return [{ solution, concern, concepts }];
   });
-}
-
-/** 与えた組のうち、グラフに ADDRESSES があるものを、両端の文とページとともに読む文 */
-export function buildConnectionsStatement(links: readonly AddressesLink[]): CypherStatement {
-  return {
-    query: [
-      "UNWIND $links AS link",
-      "MATCH (sp:Page)-[:ASSERTS]->(s:Claim {id: link.solution})-[:ADDRESSES]->(c:Claim {id: link.concern})<-[:ASSERTS]-(cp:Page)",
-      `RETURN DISTINCT ${PAIR_COLUMNS}`,
-    ].join("\n"),
-    params: { links: links.map(({ solution, concern }) => ({ solution, concern })) },
-  };
 }
 
 /** 与えた組の ADDRESSES を消す文。UC2 で張りかけたつながりを書き込みの失敗で戻すのに使う */

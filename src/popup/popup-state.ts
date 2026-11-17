@@ -14,7 +14,7 @@ import type { DbResponse } from "../shared/messages";
 import type { ModelStatus } from "../shared/model-status";
 
 /** 吹き出しを開いたタブのページ。`url` は Page の URL（正規化したもの） */
-export type PopupPage = { url: string; sample: boolean };
+export type PopupPage = { url: string };
 
 export type PopupView =
   /** 進行中の記憶・記憶済みか・モデルの状態を尋ねている */
@@ -67,9 +67,8 @@ export const initialPopupState: PopupState = {
   finishedWhileChecking: [],
 };
 
-/** 記憶を始めてよいか。同梱サンプルは Gemini Nano を使わない */
-function startView(page: PopupPage, model: ModelStatus | null): PopupView {
-  if (page.sample) return { kind: "starting" };
+/** 記憶を始めてよいか。Gemini Nano が使えるときだけ始める */
+function startView(model: ModelStatus | null): PopupView {
   switch (model?.kind) {
     case "available":
       return { kind: "starting" };
@@ -166,7 +165,7 @@ function onChecked(
   if (clipped !== null) {
     return { ...next, view: { kind: "alreadyClipped", clippedAt: clipped.clippedAt } };
   }
-  return { ...next, view: startView(page, state.model) };
+  return { ...next, view: startView(state.model) };
 }
 
 export function popupReducer(state: PopupState, action: PopupAction): PopupState {
@@ -178,7 +177,7 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
     case "model": {
       const model = action.status;
       if (state.page === null || state.view.kind !== "waitingForModel") return { ...state, model };
-      return { ...state, model, view: startView(state.page, model) };
+      return { ...state, model, view: startView(model) };
     }
     case "answered":
       return onAnswer(state, action.response);
@@ -186,7 +185,7 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
       return onEvent(state, action.event);
     case "clipAgain":
       if (state.page === null || state.view.kind !== "alreadyClipped") return state;
-      return { ...state, view: startView(state.page, state.model) };
+      return { ...state, view: startView(state.model) };
     case "checkAgain":
       if (state.view.kind !== "busy") return state;
       return { ...state, view: { kind: "checking" }, finishedWhileChecking: [] };
@@ -195,19 +194,11 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
 
 export type StepState = "done" | "now" | "todo";
 
-/**
- * 進み具合の一覧。同梱サンプルは抽出せず、事前抽出データを読む。
- * つながりの判定（UC2）も、サンプルでは事前抽出データの組を張るだけなので出さない
- */
-export function progressSteps(
-  stage: ClipStage,
-  sample: boolean,
-): { label: string; state: StepState }[] {
-  const order: ClipStage["kind"][] = sample
-    ? ["preparing", "writing"]
-    : ["preparing", "extracting", "writing", "connecting"];
+/** 進み具合の一覧 */
+export function progressSteps(stage: ClipStage): { label: string; state: StepState }[] {
+  const order: ClipStage["kind"][] = ["preparing", "extracting", "writing", "connecting"];
   const labels: Record<ClipStage["kind"], string> = {
-    preparing: sample ? "Load the bundled sample data" : "Read the page",
+    preparing: "Read the page",
     extracting:
       stage.kind === "extracting" && stage.parts > 1
         ? `Extract concepts and claims (part ${stage.part} of ${stage.parts})`

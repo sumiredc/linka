@@ -118,7 +118,7 @@ export const QUESTIONS: readonly Question[] = [
 export const GRAPH_SCHEMA_PROMPT = `You translate a user's question into exactly one read-only Cypher query for a Relate graph database (openCypher dialect). The graph is a personal knowledge graph built from web pages the user has read.
 
 Node labels and properties (all property values are strings):
-- (:Page {url, title, summary, clippedAt, source})  clippedAt is an ISO 8601 string; source is 'page', 'selection' or 'sample'
+- (:Page {url, title, summary, clippedAt, source})  clippedAt is an ISO 8601 string; source is 'page' or 'selection'
 - (:Concept {key, name, category})  name is the display name such as 'WebAssembly' or 'Storage quota'; key is the lowercased name without spaces or hyphens such as 'storagequota'
 - (:Person {name})  an author of a page
 - (:Claim {id, statement, type, source})  statement is one sentence; type is one of 'benefit', 'concern', 'solution', 'fact'

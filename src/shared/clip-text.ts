@@ -46,7 +46,7 @@ export function connectionText(link: NewConnection, clippedUrl: string): string 
 /** Gemini Nano が使えないときの説明。`reason` は使えない理由 */
 export function aiUnavailableText(reason?: string): string {
   const why = reason ? ` (${reason})` : "";
-  return `On-device AI (Gemini Nano) is not available in this browser${why}. Only the bundled sample pages can be clipped.`;
+  return `On-device AI (Gemini Nano) is not available in this browser${why}. Linka needs it to clip pages.`;
 }
 
 export function failureText(error: ClipFailure): string {
@@ -65,8 +65,6 @@ export function failureText(error: ClipFailure): string {
       return "The AI's answer was not in the expected form, even after a retry. The graph was not changed.";
     case "prompt":
       return `The on-device AI failed: ${error.message}. The graph was not changed.`;
-    case "sample":
-      return `The bundled data for this sample could not be read: ${error.message}`;
     case "alreadyClipping":
       return "This page is already being clipped.";
     case "busy":

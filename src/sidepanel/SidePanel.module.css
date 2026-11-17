@@ -154,9 +154,19 @@
   height: clamp(260px, 50vh, 460px);
   margin: 0;
   display: grid;
+  place-content: center;
   place-items: center;
   color: var(--ink-soft);
   font-size: 13px;
+}
+.graphEmpty p {
+  max-width: 34ch;
+  margin: 0 0 8px;
+  text-align: center;
+}
+.graphEmpty p:first-child {
+  color: var(--ink);
+  font-weight: 600;
 }
 .graphMeta {
   display: flex;

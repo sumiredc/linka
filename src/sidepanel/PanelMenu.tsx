@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import styles from "./SidePanel.module.css";
 
-/** 見出しの「…」メニュー。グラフが空なら Export は押せない（PRD UC4） */
+/** 見出しの「…」メニュー。グラフが空なら Export（PRD UC4）と Clear graph は押せない */
 export function PanelMenu({
   canExport,
   onExport,
   onGuide,
-  onReset,
+  onClear,
 }: {
   canExport: boolean;
   onExport(): void;
   onGuide(): void;
-  onReset(): void;
+  onClear(): void;
 }) {
   const [open, setOpen] = useState(false);
   const menu = useRef<HTMLDivElement>(null);
@@ -71,12 +71,14 @@ export function PanelMenu({
           </button>
           <button
             type="button"
+            disabled={!canExport}
+            title={canExport ? undefined : "The graph is empty"}
             onClick={() => {
               setOpen(false);
-              onReset();
+              onClear();
             }}
           >
-            Reset to demo data
+            Clear graph
           </button>
         </div>
       )}
@@ -84,8 +86,8 @@ export function PanelMenu({
   );
 }
 
-/** Reset to demo data の確認（PRD UC5 の代替フロー） */
-export function ResetDialog({
+/** Clear graph の確認（PRD UC5） */
+export function ClearDialog({
   open,
   onClose,
   onConfirm,
@@ -103,15 +105,18 @@ export function ResetDialog({
   }, [open]);
 
   return (
-    <dialog ref={dialog} className={styles.dialog} aria-labelledby="reset-title" onClose={onClose}>
-      <h2 id="reset-title">Reset to demo data?</h2>
-      <p>The pages you clipped are deleted, and the graph goes back to the bundled demo data.</p>
+    <dialog ref={dialog} className={styles.dialog} aria-labelledby="clear-title" onClose={onClose}>
+      <h2 id="clear-title">Clear the graph?</h2>
+      <p>
+        Every page you clipped is deleted from the graph, with its concepts, claims and connections.
+        Files you already exported are not affected.
+      </p>
       <div className={styles.dialogActions}>
         <button type="button" className={styles.buttonQuiet} onClick={onClose}>
           Cancel
         </button>
         <button type="button" className={styles.buttonDanger} onClick={onConfirm}>
-          Reset to demo data
+          Clear graph
         </button>
       </div>
     </dialog>

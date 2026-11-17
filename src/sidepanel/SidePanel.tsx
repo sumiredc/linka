@@ -12,7 +12,7 @@ import { GraphCanvas } from "./GraphCanvas";
 import { type GraphView, neighborsOf } from "./graph-view";
 import { NodeDetail } from "./NodeDetail";
 import { newConnectionsHighlight } from "./new-connections";
-import { PanelMenu, ResetDialog } from "./PanelMenu";
+import { ClearDialog, PanelMenu } from "./PanelMenu";
 import styles from "./SidePanel.module.css";
 import { useGraphView, useModelStatus, useStorage } from "./use-panel-data";
 
@@ -91,12 +91,25 @@ function GraphMeta({ view }: { view: GraphView }) {
   );
 }
 
+/** 空のグラフ。初めて開いた人に、最初のクリップの仕方を示す（PRD UC5） */
+export function EmptyGraph() {
+  return (
+    <div className={styles.graphEmpty}>
+      <p>Your graph is empty.</p>
+      <p>
+        Open an article, a doc or an issue you are researching, then click the Linka icon in the
+        toolbar to clip it. Pages you clip connect through the concepts and claims they share.
+      </p>
+    </div>
+  );
+}
+
 export function SidePanel() {
   const { graph, reload } = useGraphView();
   const storage = useStorage();
   const model = useModelStatus();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [resetOpen, setResetOpen] = useState(false);
+  const [clearOpen, setClearOpen] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const handoff = useAgentHandoff();
   const clipEvent = useLatestClipEvent();
@@ -126,15 +139,16 @@ export function SidePanel() {
     setSelectedId(id);
   };
 
-  const reset = async () => {
-    setResetOpen(false);
+  const clear = async () => {
+    setClearOpen(false);
     setNotice(null);
-    const response = await askDb({ kind: "resetToDemo" });
+    const response = await askDb({ kind: "clearGraph" });
     if (response.ok) {
       setSelectedId(null);
-      setNotice({ tone: "ok", text: "The graph is back to the demo data." });
+      question.clear();
+      setNotice({ tone: "ok", text: "The graph is empty." });
     } else {
-      setNotice({ tone: "bad", text: `Reset failed: ${response.error.message}` });
+      setNotice({ tone: "bad", text: `The graph could not be cleared: ${response.error.message}` });
     }
     reload();
   };
@@ -159,7 +173,7 @@ export function SidePanel() {
           canExport={exportable}
           onExport={handoff.exportNow}
           onGuide={handoff.showGuide}
-          onReset={() => setResetOpen(true)}
+          onClear={() => setClearOpen(true)}
         />
       </header>
 
@@ -178,7 +192,7 @@ export function SidePanel() {
                 onSelect={select}
               />
             ) : (
-              <p className={styles.graphEmpty}>No pages yet.</p>
+              <EmptyGraph />
             )}
             <GraphMeta view={view} />
           </>
@@ -205,8 +219,8 @@ export function SidePanel() {
         ))}
         {model?.kind === "unavailable" && (
           <p className={`${styles.notice} ${styles.warn}`}>
-            On-device AI is not available ({model.reason}). You can still browse the graph and clip
-            the bundled sample pages.
+            On-device AI is not available ({model.reason}). Clipping and questions need Gemini Nano;
+            you can still browse and export the graph.
           </p>
         )}
         <AnswerView state={question.state} onClear={question.clear} />
@@ -231,7 +245,7 @@ export function SidePanel() {
       />
 
       <AgentDialog handoff={handoff} canExport={exportable} />
-      <ResetDialog open={resetOpen} onClose={() => setResetOpen(false)} onConfirm={reset} />
+      <ClearDialog open={clearOpen} onClose={() => setClearOpen(false)} onConfirm={clear} />
     </div>
   );
 }
