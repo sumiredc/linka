@@ -6,6 +6,10 @@ Text to paste into the Devpost submission. Facts about setup and usage live in t
 
 Clip what you read in Chrome into a local knowledge graph — then hand that context to your coding agent.
 
+## Demo video
+
+https://youtu.be/ZYyIQFN0fSY (1:43)
+
 ## What it does
 
 Linka is a Chrome extension for developers who research before they build. Click the Linka icon on an article, doc or issue, and Gemini Nano, running on your device, extracts the page's summary, concepts, authors and claims: concerns, solutions, benefits and facts. Linka writes them into a Relate graph that lives inside the browser (Relate Wasm persisted to OPFS).

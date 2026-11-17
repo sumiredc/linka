@@ -8,6 +8,8 @@ Linka is a Chrome extension (Manifest V3). When you clip a page from the toolbar
 
 Built for the Relate by Neo4j Hackathon. MIT licensed.
 
+Demo video (1:43): https://youtu.be/ZYyIQFN0fSY
+
 ## Use case
 
 When you compare articles, docs and issues to choose a technology, you keep track of "which page raised this concern, and which page had the fix" in tabs, notes and memory. Close the tabs and that mapping is gone; later you reread the same pages to explain a decision or to brief a coding agent.
