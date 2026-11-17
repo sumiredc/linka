@@ -66,15 +66,24 @@ export type ExportCounts = { nodes: Record<NodeLabel, number>; relationships: nu
 export type GraphExport = { script: string; counts: ExportCounts };
 
 /**
+ * 書き出しの最初の文。前の linka.rl に流しても、そのあと消したページが残らないよう、中身を置き換える。
+ * 消すコマンドを OS ごとに案内せずに済む（PRD UC4）
+ */
+export const CLEAR_STORE_STATEMENT: CypherStatement = {
+  query: "MATCH (n) DETACH DELETE n",
+  params: {},
+};
+
+/**
  * {@link EXPORT_READ_SCRIPT} の結果を、グラフを再現するスクリプトにする。
- * 空のストアに流すと同じノード・プロパティ・関係ができる。MERGE なので、同じストアに 2 回流しても増えない
+ * どのストアに流しても、中身が書き出したときのグラフと同じになる
  */
 export function buildGraphExport(results: readonly { rows: Rows }[]): GraphExport {
   const expected = NODES.length + RELATIONSHIPS.length;
   if (results.length !== expected) {
     throw new Error(`Expected ${expected} results to export, got ${results.length}`);
   }
-  const statements: CypherStatement[] = [];
+  const statements: CypherStatement[] = [CLEAR_STORE_STATEMENT];
   const nodes = {} as Record<NodeLabel, number>;
   NODES.forEach(({ label, key }, index) => {
     // 値は Relate が JSON で返したものなので、そのまま Cypher のリテラルにできる
@@ -112,8 +121,7 @@ function header({ nodes, relationships }: ExportCounts): string {
   const summary = NODES.map(({ label }) => `${nodes[label]} ${label}`).join(", ");
   return [
     `// Linka graph export: ${summary}, ${relationships} relationships.`,
-    // 前の linka.rl に流すと、そのあと消したページが残る（PRD UC4 の例外フロー）
-    `// Load into a new store: relate query -d linka.rl < ${EXPORT_FILE_NAME}`,
+    `// Loading it replaces everything in the store: relate query -d linka.rl < ${EXPORT_FILE_NAME}`,
     "",
   ].join("\n");
 }

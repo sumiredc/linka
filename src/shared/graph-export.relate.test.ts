@@ -142,7 +142,17 @@ describe("the exported graph reloaded into an empty store", () => {
     expect(contents(copy)).toEqual(contents(db));
   });
 
-  it("is an empty script apart from the header for an empty graph", () => {
+  it("replaces what a store already holds, so pages deleted since the last export do not remain", () => {
+    const db = trickyGraph();
+    const { script } = exportOf(db);
+    const previous = openMemoryDb();
+    runScript(previous, seed);
+    run(previous, "CREATE (:Page {url: 'https://deleted.example/', title: 'Deleted since'})");
+    runScript(previous, script);
+    expect(contents(previous)).toEqual(contents(db));
+  });
+
+  it("leaves an empty store for an empty graph", () => {
     const db = openMemoryDb();
     const { script, counts } = exportOf(db);
     expect(counts.relationships).toBe(0);
