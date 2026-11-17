@@ -2,7 +2,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AgentDialog, type AgentHandoff } from "./AgentDialog";
-import { BUILD_STORE_FROM_LINKA_COMMAND, CHECK_STORE_COMMAND } from "./agent-guide";
+import { CHECK_STORE_COMMAND } from "./agent-guide";
 
 // #21 の実機確認でつまずいた 2 か所（macOS のダウンロードフォルダの許可・.rl を作る前の登録）の案内
 
@@ -38,20 +38,12 @@ describe("the Use with your agent dialog", () => {
     );
   });
 
-  it("tells what to do when the terminal may not read ~/Downloads, with a copyable command for ~/linka", () => {
+  it("tells to move the file to ~/linka and run the same command when the terminal may not read ~/Downloads", () => {
     const build = steps()[0];
-    expect(text(build)).toContain("Operation not permitted");
     expect(text(build)).toContain(
-      "Privacy & Security → Files and Folders → your terminal app → Downloads Folder (or Full Disk Access)",
+      "Move the file to ~/linka in Finder and run the same command again.",
     );
-    expect(text(build)).toContain("restart the terminal");
-    expect(text(build)).toContain("move the file to ~/linka (create the folder if needed)");
-    expect(text(build)).toContain(
-      "rename it to linka-export.cypher if it is, say, linka-export (1).cypher",
-    );
-    const fallback = build?.querySelectorAll("pre")[1];
-    expect(fallback?.textContent).toBe(BUILD_STORE_FROM_LINKA_COMMAND);
-    expect(fallback?.parentElement?.querySelector("button")?.textContent).toBe("Copy");
+    expect(build?.querySelectorAll("pre")).toHaveLength(1);
   });
 
   it("names each Copy button after what it copies, so a screen reader can tell them apart", () => {
@@ -62,7 +54,6 @@ describe("the Use with your agent dialog", () => {
     );
     expect(names).toEqual([
       "Copy the store command",
-      "Copy the command for a file in ~/linka",
       "Copy the Claude Code command",
       "Copy the Codex command",
       "Copy the prompt",
