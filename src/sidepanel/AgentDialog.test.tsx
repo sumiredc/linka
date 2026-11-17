@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { EXPORT_FILE_NAME } from "../shared/graph-export";
 import { AgentDialog, type AgentHandoff } from "./AgentDialog";
-import { CHECK_STORE_COMMAND } from "./agent-guide";
+import { BUILD_STORE_COMMAND, CHECK_STORE_COMMAND } from "./agent-guide";
 
-// #21 の実機確認でつまずいた 2 か所（macOS のダウンロードフォルダの許可・.rl を作る前の登録）の案内
+// 手順はプロジェクトのフォルダで完結する。.rl を作る前に登録すると失敗する（#21 の実機確認でつまずいた）
 
 const handoff: AgentHandoff = {
   open: true,
@@ -23,27 +24,24 @@ const steps = () => {
 const text = (element: Element | undefined) => element?.textContent?.replace(/\s+/g, " ") ?? "";
 
 describe("the Use with your agent dialog", () => {
-  it("numbers the steps: build the store, register it, then ask", () => {
-    const [build, register, ask] = steps().map(text);
+  it("numbers the steps: save the export, build the store, register it, then ask", () => {
+    const [save, build, register, ask] = steps().map(text);
+    expect(save).toMatch(/^Save the export in your project folder/);
     expect(build).toMatch(/^Make a Relate file/);
     expect(register).toMatch(/^Register it/);
     expect(ask).toMatch(/^Ask your agent/);
   });
 
-  it("points at the first line of the store command for a different download folder", () => {
-    const build = steps()[0];
-    expect(text(build)).toContain("change the path on the first line");
-    expect(build?.querySelector("pre")?.textContent?.split("\n")[0]).toBe(
-      'downloads="$HOME/Downloads" &&',
-    );
+  it("explains saving the export in words, without a command", () => {
+    const save = steps()[0];
+    expect(save?.querySelectorAll("pre")).toHaveLength(0);
+    expect(text(save)).toContain(EXPORT_FILE_NAME);
   });
 
-  it("tells to move the file to ~/linka and run the same command when the terminal may not read ~/Downloads", () => {
-    const build = steps()[0];
-    expect(text(build)).toContain(
-      "Move the file to ~/linka in Finder and run the same command again.",
-    );
-    expect(build?.querySelectorAll("pre")).toHaveLength(1);
+  it("shows the store command as one line run in the project folder", () => {
+    const build = steps()[1];
+    expect(build?.querySelector("pre")?.textContent).toBe(BUILD_STORE_COMMAND);
+    expect(BUILD_STORE_COMMAND).not.toContain("\n");
   });
 
   it("names each Copy button after what it copies, so a screen reader can tell them apart", () => {
@@ -68,11 +66,11 @@ describe("the Use with your agent dialog", () => {
     }
   });
 
-  it("says step 1 must succeed before registering, and how to check when /mcp shows linka failed", () => {
-    const register = text(steps()[1]);
-    expect(register).toContain("after step 1 succeeds");
+  it("says the store must be built before registering, and how to check when /mcp shows linka failed", () => {
+    const register = text(steps()[2]);
+    expect(register).toContain("after step 2 succeeds");
     expect(register).toContain("If /mcp shows linka as failed");
     expect(register).toContain(CHECK_STORE_COMMAND);
-    expect(register).toContain("run step 1");
+    expect(register).toContain("run step 2");
   });
 });

@@ -30,9 +30,9 @@ it("leaves the side panel graph unchanged and saves a script that rebuilds the s
   const saved: string[] = [];
   const outcome = await exportGraph({
     readGraph: async ({ script }) => classifyScript(db.executeScript(script, null)),
-    save: (_, text) => saved.push(text),
+    pickTarget: async () => ({ kind: "file", write: async (text) => void saved.push(text) }),
   });
-  expect(outcome.ok).toBe(true);
+  expect(outcome?.ok).toBe(true);
   expect(panelCounts(db)).toEqual(before);
   expect(before).toEqual({ pages: 15, concepts: 29, claims: 48, links: 237 });
 
