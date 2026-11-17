@@ -84,6 +84,42 @@
   font-weight: 600;
 }
 
+/* ターミナルの切り替え。エージェントのタブと見分けられるよう、下線ではなく枠で囲む */
+.shells {
+  border: 0;
+  padding: 0;
+  margin: 8px 0 4px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.shells legend {
+  float: left;
+  padding: 0;
+  margin: 5px 8px 0 0;
+}
+.shellOptions {
+  display: inline-flex;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 2px;
+}
+.shell {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 4px 10px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.shell:hover {
+  color: var(--ink);
+}
+.shell[aria-pressed="true"] {
+  background: var(--act-tint);
+  color: var(--act);
+  font-weight: 600;
+}
+
 .dialog p.note,
 .note {
   margin: 6px 0 0;
