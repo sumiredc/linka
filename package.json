@@ -10,9 +10,8 @@
     "format": "biome format --write .",
     "typecheck": "tsc -p .",
     "test": "vitest run",
-    "dev": "vite build --watch --mode dev-page",
+    "dev": "vite build --watch",
     "build": "vite build",
-    "build:dev": "vite build --mode dev-page",
     "seed": "node --import ./scripts/ts-resolve.mjs scripts/seed.ts",
     "store": "sh scripts/build-store.sh"
   },

@@ -42,14 +42,7 @@ function contentScript(): Plugin {
   };
 }
 
-/**
- * 開発用ページ dev.html は、このモードでビルドしたときだけ入れる（npm run build:dev、npm run dev）。
- * DB に書き込めるコンソールがあるので、配る拡張機能（npm run build）には入れない。
- * モードを変えても NODE_ENV は production のままなので、React などは本番用のビルドになる
- */
-const DEV_PAGE_MODE = "dev-page";
-
-export default defineConfig(({ mode }) => ({
+export default defineConfig({
   // 拡張機能のページは chrome-extension://<id>/ 直下から読まれるので相対パスで出す
   base: "./",
   plugins: [react(), contentScript()],
@@ -62,7 +55,6 @@ export default defineConfig(({ mode }) => ({
         popup: "popup.html",
         sidepanel: "sidepanel.html",
         offscreen: "offscreen.html",
-        ...(mode === DEV_PAGE_MODE ? { dev: "dev.html" } : {}),
         background: "src/background/index.ts",
       },
       output: {
@@ -73,4 +65,4 @@ export default defineConfig(({ mode }) => ({
     },
   },
   worker: { format: "es" },
-}));
+});

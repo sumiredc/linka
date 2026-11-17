@@ -62,7 +62,7 @@ describe("isFromExtensionPage", () => {
   const root = "chrome-extension://abc/";
 
   it("accepts a page of this extension, even one opened in a tab", () => {
-    expect(isFromExtensionPage({ url: "chrome-extension://abc/dev.html" }, root)).toBe(true);
+    expect(isFromExtensionPage({ url: "chrome-extension://abc/sidepanel.html" }, root)).toBe(true);
   });
 
   it("rejects a content script, which reports the URL of the page it runs in", () => {
