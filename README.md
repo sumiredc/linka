@@ -243,15 +243,16 @@ relate telemetry status
 npm test            # Vitest, including tests against a real in-memory Relate
 npm run typecheck   # tsc
 npm run lint        # Biome (CI runs `npx biome ci .`)
-npm run build       # dist/
-npm run dev         # rebuild dist/ on change; reload the extension on chrome://extensions
+npm run build       # dist/, the extension to load or ship
+npm run build:dev   # dist/ with the development page dev.html
+npm run dev         # like build:dev, and rebuild on change; reload the extension on chrome://extensions
 ```
 
 The source is under `src/`, one folder per place it runs: `background/` (service worker), `offscreen/` (the Relate database and Gemini Nano), `popup/`, `sidepanel/`, `content/` (reads the page) and `shared/`.
 
 ### Manual checks on `dev.html`
 
-Open `chrome-extension://<extension-id>/dev.html` in a tab (it is not linked from the UI; labels are in Japanese). It has a Cypher console on the extension's real database (writes there change your graph), an extraction check and Gemini Nano checks.
+`dev.html` is only in development builds: run `npm run build:dev` or `npm run dev`, reload the extension, and open `chrome-extension://<extension-id>/dev.html` in a tab (it is not linked from the UI; labels are in Japanese). `npm run build` leaves it out, because its console can write to your graph. It has a Cypher console on the extension's real database (writes there change your graph), an extraction check and Gemini Nano checks.
 
 ### Offscreen document logs
 
