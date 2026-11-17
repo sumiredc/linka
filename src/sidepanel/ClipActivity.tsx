@@ -8,7 +8,6 @@ import {
   failureText,
   stageText,
 } from "../shared/clip-text";
-import { LinkaMark } from "./LinkaMark";
 import styles from "./SidePanel.module.css";
 
 /** 最後に届いた記憶の通知。開いたときに進んでいる記憶があれば、その進み具合から始める */
@@ -76,7 +75,6 @@ function ClipStatus({ event }: { event: ClipEvent }) {
 export function ClipActivity({ event }: { event: ClipEvent | null }) {
   return (
     <section className={styles.clip} aria-label="Clip">
-      <LinkaMark size={22} />
       <div className={styles.clipBody}>
         <p className={styles.clipGuide}>Click the Linka icon in the toolbar to clip this page</p>
         {event && <ClipStatus event={event} />}

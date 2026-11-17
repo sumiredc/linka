@@ -10,7 +10,6 @@ import { ClipActivity, useLatestClipEvent } from "./ClipActivity";
 import { canExport } from "./export-graph";
 import { GraphCanvas } from "./GraphCanvas";
 import { type GraphView, neighborsOf } from "./graph-view";
-import { LinkaMark } from "./LinkaMark";
 import { NodeDetail } from "./NodeDetail";
 import { newConnectionsHighlight } from "./new-connections";
 import { PanelMenu, ResetDialog } from "./PanelMenu";
@@ -155,10 +154,6 @@ export function SidePanel() {
   return (
     <div className={styles.panel}>
       <header className={styles.panelHead}>
-        <div className={styles.brand}>
-          <LinkaMark size={20} />
-          Linka
-        </div>
         <AiStatus status={model} />
         <PanelMenu
           canExport={exportable}
