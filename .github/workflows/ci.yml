@@ -1,9 +1,23 @@
 name: CI
 
+# 確かめるのはコードとその設定だけなので、文書・画像・同梱ストアだけの変更では走らせない。
+# 新しく足したコードの置き場所が漏れないよう、走らせる側ではなく走らせない側を並べる
 on:
   pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "assets/**"
+      - "data/**"
+      - "LICENSE"
   push:
     branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "assets/**"
+      - "data/**"
+      - "LICENSE"
 
 permissions:
   contents: read
