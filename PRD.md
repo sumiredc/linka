@@ -309,7 +309,7 @@ flowchart LR
 | 要件（出どころ） | 対応 | 状態 |
 |---|---|---|
 | 公開リポジトリと topic `relate`（Rules §3・§4、Overview） | topic は設定済み。`relate-neo4j-hackathon` も付ける。リポジトリは self-hosted runner を消すまで private のままにし、提出の直前に公開する（#4） | 済（2026-11-18 に公開。topic は `relate`・`relate-neo4j-hackathon`・`gemini`） |
-| プロジェクトの説明：何をするか・なぜ役立つか・何と何をつなぐか（Rules §4、Overview） | Devpost に英語で書く（§1 から） | 済（`docs/devpost.md` の文面で提出。https://devpost.com/software/linka-on2dqh ） |
+| プロジェクトの説明：何をするか・なぜ役立つか・何と何をつなぐか（Rules §4、Overview） | Devpost に英語で書く（§1 から） | 済（https://devpost.com/software/linka-on2dqh ） |
 | README（setup / use、指定テンプレート）（Overview） | Use case / How it uses Relate（Mode：拡張機能内は OPFS、同梱は single file。理由：Wasm で永続化できるのは OPFS だけで、審査員が点検できるよう同じ内容を `.rl` でも同梱）/ Setup and run / Where the data lives | 済 |
 | 永続化されたストア（Overview） | `data/linka.rl`（`seed/demo.cypher` から `npm run store` で生成し、コミットする）。同じ seed から作り直してもバイト列が一致しないので、seed を変えたときだけ作り直す。問い合わせは `--read-only` で開く（付けないと読むだけでもファイルが書き換わり、差分が出る） | 作成済み（seed を変えたら作り直す） |
 | Relate が実際に動いているコード（Overview） | 拡張機能本体 | 済 |
