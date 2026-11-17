@@ -10,6 +10,8 @@ Clip what you read in Chrome into a local knowledge graph — then hand that con
 
 https://youtu.be/ZYyIQFN0fSY (1:43)
 
+Thumbnail: [`assets/thumbnail.png`](../assets/thumbnail.png) (1280×720, also used on YouTube)
+
 ## What it does
 
 Linka is a Chrome extension for developers who research before they build. Click the Linka icon on an article, doc or issue, and Gemini Nano, running on your device, extracts the page's summary, concepts, authors and claims: concerns, solutions, benefits and facts. Linka writes them into a Relate graph that lives inside the browser (Relate Wasm persisted to OPFS).
