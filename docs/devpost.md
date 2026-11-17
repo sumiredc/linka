@@ -1,6 +1,6 @@
 # Linka — Devpost description
 
-Text to paste into the Devpost submission. Facts about setup and usage live in the [README](../README.md); this file is only the pitch.
+Text to paste into the Devpost submission, one section per field. Facts about setup and usage live in the [README](../README.md); this file is only the pitch.
 
 ## Elevator pitch
 
@@ -8,38 +8,71 @@ Build a knowledge graph from the pages you read, right in Chrome. Ask it questio
 
 ## Thumbnail
 
-[`assets/thumbnail-devpost.png`](../assets/thumbnail-devpost.png) (1500×1000, the 3:2 ratio Devpost recommends)
+[`assets/thumbnail-devpost.png`](../assets/thumbnail-devpost.png) (1500×1000, the 3:2 ratio Devpost recommends). The YouTube video uses [`assets/thumbnail.png`](../assets/thumbnail.png) (1280×720).
 
-## Demo video
+## About the project
 
-https://youtu.be/ZYyIQFN0fSY (1:43)
+Paste everything between the two lines below into **About the project**.
 
-Thumbnail on YouTube: [`assets/thumbnail.png`](../assets/thumbnail.png) (1280×720)
+---
+
+## Inspiration
+
+Before I adopt a new technique, I read about it: engineering blogs on how teams use coding agents, docs, issues and comparisons. Then I want my coding agent to build with what I read. Today that means pasting links or rereading pages to brief it, and the agent gets a pile of text, not what the pages say about each other. I wanted to build that knowledge as easily as bookmarking a page, ask it questions myself, and hand the same knowledge to my agent.
 
 ## What it does
 
-Linka is a Chrome extension for developers who research before they build. Click the Linka icon on an article, doc or issue, and Gemini Nano, running on your device, extracts the page's summary, concepts, authors and claims: concerns, solutions, benefits and facts. Linka writes them into a Relate graph that lives inside the browser (Relate Wasm persisted to OPFS).
+Linka is a Chrome extension. Click its icon on an article, doc or issue, and Gemini Nano, running on your device, extracts the page's summary, concepts, authors and claims: concerns, solutions, benefits and facts. Linka writes them into a Relate graph inside the browser (Relate Wasm persisted to OPFS).
 
-Pages connect through shared concepts. More importantly, when a page you clip proposes a solution to a concern raised on another page, Linka asks Gemini Nano whether it really addresses it and, if so, links the two claims with `ADDRESSES`. The popup and the side panel show these as suggested connections as you clip. A small on-device model can be wrong: in our labeled set of 21 pairs it agreed on 13, so Linka says a solution *may* address a concern and asks you to check it.
+- **Build it in your browser.** Pages connect through shared concepts. When a page proposes a solution to a concern raised on another page, Linka asks Gemini Nano whether it addresses it and links the two claims with `ADDRESSES`. These show up as suggested connections, because a small on-device model can be wrong.
+- **Ask your graph.** In the side panel, ask a question such as "Which solutions address concerns about offline support?". Linka runs a Cypher query on Relate, shows the query, and highlights the answer in the graph.
+- **Hand it to your coding agent.** Export the graph, turn it into a single-file Relate store with the Relate CLI, and register `relate serve --read-only --mcp stdio` with Claude Code or Codex. Your agent then plans with the concerns and solutions you collected.
 
-In the side panel you can browse the graph, ask it questions in plain English ("Which solutions address concerns about offline support?"), and see the Cypher that answered and the path highlighted in the graph. When you are ready to build, export the graph, turn it into a single-file Relate store with the Relate CLI, and register `relate serve --read-only --mcp stdio` with Claude Code or Codex. Your agent then plans with the concerns and solutions you researched.
-
-Linka starts with an empty graph, so it holds only the pages you chose to clip. A demo graph of 15 research pages ships separately as `data/linka.rl`, so you can inspect a persisted Relate store with the Relate CLI without installing anything in Chrome.
-
-## Why it is useful
-
-When you compare technologies, you keep "which page raised this concern, and which page had the fix" in tabs and memory. Close the tabs and it is gone; later you reread the same pages to justify a decision or to brief a coding agent. Linka keeps that mapping as a graph you can trace and query, and hands it to your agent as context instead of a pile of links. It only stores pages you choose to clip, and nothing leaves your device: extraction and questions run on Gemini Nano, and there is no server.
-
-## What it connects
-
-- **Pages to pages**, through shared concepts and cross-page `ADDRESSES` links from a solution on one page to the concern it solves on another.
-- **Your browser to your coding agent**: the graph you build while reading in Chrome becomes MCP context for Claude Code or Codex through the Relate CLI.
-- **On-device AI to a graph database**: Gemini Nano extracts and judges; Relate stores, connects and answers with Cypher that the code builds, never the model.
+Nothing leaves your device: extraction and questions run on Gemini Nano, and there is no server. Linka starts with an empty graph and stores only the pages you clip. A demo graph of 15 research pages ships as `data/linka.rl`, so you can inspect a persisted Relate store with the CLI without installing anything in Chrome.
 
 ## How we built it
 
-- Relate Wasm 1.0.1 in a dedicated worker owned by an MV3 offscreen document, persisted to OPFS; the popup and every side panel send it requests
-- Chrome Prompt API (Gemini Nano) with `responseConstraint` JSON Schemas generated by zod, for extraction, `ADDRESSES` judging and picking a question type
-- Relate CLI (`relate query`) to build `.rl` stores and Relate's MCP server (`relate serve --read-only --mcp stdio`) for agents
-- React, TypeScript, Vite, react-force-graph-2d, Mozilla Readability, Vitest and Biome
-- Developed with Claude Code and Gemini
+- **Relate in the browser.** Relate Wasm 1.0.1 persists only to OPFS, and only from a dedicated worker. A service worker cannot start one, so an MV3 offscreen document owns the store in a dedicated worker, and the popup and every side panel send it requests.
+- **Gemini Nano through the Prompt API**, called from the offscreen document (the API is not available in workers). Extraction, `ADDRESSES` judging and picking a question type all use `responseConstraint` with JSON Schemas generated by zod.
+- **Cypher built by the code, never by the model.** Extraction results become parameterized `MERGE` statements. For questions, Gemini Nano only picks one of nine query kinds and its target.
+- **The hand-off** uses the Relate CLI (`relate query`) to build the `.rl` store and Relate's MCP server (`relate serve --read-only --mcp stdio`), so the agent sees only `read_cypher` and `get_schema`.
+- React, TypeScript, Vite, react-force-graph-2d, Mozilla Readability, Vitest and Biome. Many tests run against a real Relate database in Node. Developed with Claude Code and Gemini.
+
+## Challenges we ran into
+
+- **Letting a small model write Cypher did not work.** When Gemini Nano wrote Cypher for 10 test questions, only 2 answers were right. I switched to having it choose a query kind and a target, and the code builds the query.
+- **Long pages.** Reading about 30,000 characters in one prompt took longer than the 90-second timeout on slower machines, so pages are split into parts of about 8,000 characters.
+- **No transactions in Relate Wasm.** A clip writes several statements, so Linka records how to undo them before writing and restores the graph if a write fails partway.
+- **Judging connections.** On 21 labeled pairs, Gemini Nano's judgment agreed on 13. I tightened the instructions and kept the result honest in the UI: a solution *may* address a concern.
+- **Getting the agent set up across machines.** A relative path to the store breaks when the agent starts in a subfolder, and Windows PowerShell 5.1 drops a bare `--`, so the guide shows absolute paths and separate macOS / Linux and Windows commands.
+
+## Accomplishments that we're proud of
+
+- The whole loop runs on your device: clip, connect, ask, and hand off to a coding agent, with no server and no API key.
+- Cross-page `ADDRESSES` links turn separate pages into a map of which page answers which concern, and both you and your agent can query it.
+- The graph you build in Chrome becomes MCP context for an agent with two commands, read-only.
+
+## What we learned
+
+- A small on-device model is much more reliable at choosing between options than at writing code. Keeping the model to extraction and choices, and keeping Cypher in the code, made the results predictable.
+- Relate runs the same Cypher in the browser (Wasm) and on the command line, so one export format serves both the extension and the agent.
+
+## What's next for Linka
+
+- Removing a single page and correcting extracted claims
+- An optional local model endpoint (such as Ollama) for machines where Gemini Nano is not available
+- Better extraction for pages that are not in English
+
+---
+
+## Built with
+
+`chrome-extension`, `gemini-nano`, `chrome-prompt-api`, `relate`, `cypher`, `webassembly`, `opfs`, `mcp`, `typescript`, `react`, `vite`, `zod`, `react-force-graph`, `mozilla-readability`, `vitest`, `biome`, `claude-code`
+
+## Try it out links
+
+- https://github.com/sumiredc/linka
+
+## Video demo link
+
+https://youtu.be/ZYyIQFN0fSY
