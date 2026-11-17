@@ -42,12 +42,12 @@ export function DbConsole() {
             id="reset"
             type="button"
             onClick={async () => {
-              if (!window.confirm("グラフをすべて消して、デモデータに戻します")) return;
+              if (!window.confirm("グラフをすべて消します")) return;
               setResponse(null);
-              setResponse(await askDb({ kind: "resetToDemo" }));
+              setResponse(await askDb({ kind: "clearGraph" }));
             }}
           >
-            デモデータに戻す
+            グラフを空にする
           </button>
         </div>
       </form>

@@ -2,7 +2,6 @@
 import { unreadableUrlReason } from "../content/unreadable-url";
 import { type ClippedPage, pageUrlOf } from "../shared/clip-status";
 import { type DbResponse, isMessageFor } from "../shared/messages";
-import { samplePageOf } from "../shared/sample-page";
 
 export type Badge = { text: string; color: string };
 
@@ -16,8 +15,7 @@ export type TabLike = { id?: number; url?: string };
  * 記憶済みかを尋ねる価値のあるタブの URL か。chrome:// などは記憶できないので、
  * 尋ねずに印を消す（offscreen document を起こさない）
  */
-export function canBeClipped(tabUrl: string, extensionRoot: string): boolean {
-  if (samplePageOf(tabUrl, extensionRoot)) return true;
+export function canBeClipped(tabUrl: string): boolean {
   // file:// は読めるかどうかを尋ねずに分からないが、記憶済みなら印を付けたいので尋ねる
   return unreadableUrlReason(tabUrl, true) === null;
 }
@@ -33,7 +31,7 @@ export function refreshesOnUpdate(changeInfo: { url?: string; status?: string })
 export type BadgeTrigger =
   /** 記憶が終わった。そのページを表示しているタブだけ付け直す */
   | { kind: "page"; url: string }
-  /** グラフが変わった（Reset to demo data など）。どのページの印が変わったか分からないので全タブ */
+  /** グラフが変わった（Clear graph など）。どのページの印が変わったか分からないので全タブ */
   | { kind: "all" };
 
 /** offscreen document から拡張機能のすべてのページへの通知のうち、印を付け直すきっかけになるもの */
@@ -67,20 +65,13 @@ export function badgeOf(response: DbResponse<ClippedPage | null>): Badge | null 
 }
 
 /** 記憶が終わったページ（Page の URL）を表示しているタブ */
-export function tabsShowing(
-  tabs: TabLike[],
-  pageUrl: string,
-  extensionRoot: string,
-): { id: number; url: string }[] {
+export function tabsShowing(tabs: TabLike[], pageUrl: string): { id: number; url: string }[] {
   return tabs.flatMap(({ id, url }) =>
-    id !== undefined && url !== undefined && pageUrlOf(url, extensionRoot) === pageUrl
-      ? [{ id, url }]
-      : [],
+    id !== undefined && url !== undefined && pageUrlOf(url) === pageUrl ? [{ id, url }] : [],
   );
 }
 
 export type BadgeRefresherOptions = {
-  extensionRoot: string;
   isClipped(tabUrl: string): Promise<DbResponse<ClippedPage | null>>;
   setBadge(tabId: number, badge: Badge): Promise<void>;
 };
@@ -98,7 +89,7 @@ export function createBadgeRefresher(options: BadgeRefresherOptions) {
     latest.set(tabId, mine);
     try {
       const badge =
-        tabUrl !== undefined && canBeClipped(tabUrl, options.extensionRoot)
+        tabUrl !== undefined && canBeClipped(tabUrl)
           ? badgeOf(await options.isClipped(tabUrl))
           : NO_BADGE;
       if (badge === null || latest.get(tabId) !== mine) return;

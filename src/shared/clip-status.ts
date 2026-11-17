@@ -1,10 +1,9 @@
 // 記憶（UC1）の依頼・結果・通知の形。吹き出しとサイドパネルが offscreen document とやり取りする
 import type { ConnectionEnd } from "./graph-statements";
-import { type SamplePage, samplePageOf } from "./sample-page";
 import { normalizeUrl } from "./url";
 
-/** 記憶する中身。同梱サンプルでは本文を読まず、事前抽出データを使う */
-export type ClipBody = { kind: "text"; text: string } | { kind: "sample"; page: SamplePage };
+/** 記憶する中身。タブから読んだ本文 */
+export type ClipBody = { kind: "text"; text: string };
 
 export type ClipRequest =
   /** 返事は `ClipResult`。記憶が終わるまで返事をしない */
@@ -14,11 +13,11 @@ export type ClipRequest =
   /** 返事は `ClippedPage | null`。記憶していないページなら null */
   | { kind: "isClipped"; tabUrl: string };
 
-/** 記憶しているページ。`url` は Page の URL（正規化したもの。サンプルではリポジトリの URL） */
+/** 記憶しているページ。`url` は Page の URL（正規化したもの） */
 export type ClipTarget = { url: string; tabUrl: string; title: string };
 
 export type ClipStage =
-  /** 受け付けて、抽出の前の確認やサンプルの読み込みをしている */
+  /** 受け付けて、抽出の前の確認をしている */
   | { kind: "preparing" }
   /** 分割した本文の `part` 番目（1 から）を抽出している */
   | { kind: "extracting"; part: number; parts: number }
@@ -68,7 +67,7 @@ export type ClipFailureKind =
   | "unreadable"
   /** 抽出する本文が無い */
   | "noText"
-  /** この環境では Gemini Nano が使えない（同梱サンプル以外は記憶できない） */
+  /** この環境では Gemini Nano が使えない（記憶できない） */
   | "unavailable"
   /** モデルがまだ入っていない、またはダウンロード中 */
   | "notReady"
@@ -76,8 +75,6 @@ export type ClipFailureKind =
   | "invalidOutput"
   /** Prompt API の呼び出しが失敗した、または時間切れ */
   | "prompt"
-  /** 同梱サンプルの事前抽出データを読めない */
-  | "sample"
   /** 同じページを記憶している最中 */
   | "alreadyClipping"
   /** 別のページを記憶している最中。終わってから押し直してもらう */
@@ -109,13 +106,8 @@ export type ClipEvent =
   /** 依頼を受け付けた記憶が、成功か失敗で終わった。受け付けなかった依頼（busy など）では送らない */
   | { kind: "finished"; target: ClipTarget; result: ClipResult };
 
-/**
- * タブの URL から、記憶したときの Page の URL を返す。サンプルページはリポジトリの URL になる。
- * URL として読めなければ null
- */
-export function pageUrlOf(tabUrl: string, extensionRoot: string): string | null {
-  const sample = samplePageOf(tabUrl, extensionRoot);
-  if (sample) return sample.url;
+/** タブの URL から、記憶したときの Page の URL を返す。URL として読めなければ null */
+export function pageUrlOf(tabUrl: string): string | null {
   try {
     return normalizeUrl(tabUrl);
   } catch {

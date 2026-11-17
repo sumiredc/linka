@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { claimId } from "./claim-id";
-import { type Clip, ClipSchema, ExtractionSchema } from "./extraction";
+import { type Clip, ClipSchema } from "./extraction";
 import type { AddressesLink } from "./graph-statements";
 import { normalizeUrl } from "./url";
 
@@ -18,39 +18,12 @@ export const AddressesRefSchema = z.object({
 });
 export type AddressesRef = z.infer<typeof AddressesRefSchema>;
 
-/** `seed/demo.json` の形。seed・同梱ストア・初回のグラフはすべてここから作る。 */
+/** `seed/demo.json` の形。`seed/demo.cypher` と同梱ストア `data/linka.rl` はここから作る。テストのグラフの例にも使う。 */
 export const DemoDataSchema = z.object({
   clips: z.array(ClipSchema),
   addresses: z.array(AddressesRefSchema),
 });
 export type DemoData = z.infer<typeof DemoDataSchema>;
-
-/**
- * 同梱サンプルページ（`samples/<name>.html`）の事前抽出データ（`samples/<name>.json`）。
- * 拡張機能の ID は環境ごとに変わるので、Page の URL には `chrome-extension://` ではなく、
- * どの環境でも同じ `url`（リポジトリにあるそのファイルの URL）を使う。
- * Nano が無いと UC2 の判定もできないので、デモデータの Claim との ADDRESSES も判定済みで持つ。
- */
-export const SampleSchema = z.object({
-  /** 拡張機能の中でのページの位置。開いているタブがサンプルかどうかはこれで見分ける */
-  path: z.string().regex(/^samples\/[a-z0-9-]+\.html$/),
-  url: z.url(),
-  title: z.string(),
-  extraction: ExtractionSchema,
-  addresses: z.array(AddressesRefSchema),
-});
-export type Sample = z.infer<typeof SampleSchema>;
-
-/** サンプルをクリップにする。Page の URL はサンプルの `url` にする。 */
-export function sampleClip(sample: Sample, clippedAt: string): Clip {
-  return {
-    url: sample.url,
-    title: sample.title,
-    clippedAt,
-    source: "sample",
-    extraction: sample.extraction,
-  };
-}
 
 function describeRef(ref: ClaimRef): string {
   return `${ref.page} の「${ref.statement}」`;

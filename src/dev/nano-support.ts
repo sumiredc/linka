@@ -1,30 +1,31 @@
-// 開発用。Nano の検証の画面で共有する小物（サンプルの読み込み・抽出の 1 回・時間切れ）
+// 開発用。Nano の検証の画面で共有する小物（検証用ページの読み込み・抽出の 1 回・時間切れ）
 import { z } from "zod";
 import { type Extraction, ExtractionSchema } from "../shared/extraction";
 import { htmlToText } from "./extraction-checks";
 import type { LanguageModelSession } from "./language-model";
+import crdtNotesSync from "./pages/crdt-notes-sync.html?raw";
+import keepOfflineData from "./pages/keep-offline-data.html?raw";
+import sqliteWorkerOwner from "./pages/sqlite-worker-owner.html?raw";
 import { type Json, SCHEMA_VARIANTS, stripKeywords } from "./schema-keywords";
 
-export const SAMPLE_FILES = [
-  "keep-offline-data.html",
-  "crdt-notes-sync.html",
-  "sqlite-worker-owner.html",
-] as const;
+/** 抽出を試すページ。dev.html と一緒にだけバンドルに入る */
+const PAGES: readonly { file: string; html: string }[] = [
+  { file: "keep-offline-data.html", html: keepOfflineData },
+  { file: "crdt-notes-sync.html", html: crdtNotesSync },
+  { file: "sqlite-worker-owner.html", html: sqliteWorkerOwner },
+];
 
 export interface PageText {
   title: string;
   text: string;
 }
 
-/** 同梱のサンプルページ（public/samples）を読み、タグを除いた本文にする */
+/** 検証用のページ（src/dev/pages）の、タグを除いた本文 */
 export async function loadSamples(): Promise<PageText[]> {
-  return Promise.all(
-    SAMPLE_FILES.map(async (file) => {
-      const html = await (await fetch(`samples/${file}`)).text();
-      const title = new DOMParser().parseFromString(html, "text/html").title || file;
-      return { title, text: htmlToText(html) };
-    }),
-  );
+  return PAGES.map(({ file, html }) => {
+    const title = new DOMParser().parseFromString(html, "text/html").title || file;
+    return { title, text: htmlToText(html) };
+  });
 }
 
 export function extractionJsonSchema(variantIndex: number): Json {

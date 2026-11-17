@@ -70,7 +70,7 @@ describe("ClipSchema", () => {
     expect(ClipSchema.safeParse(clip).success).toBe(true);
   });
 
-  it("rejects a source outside page, selection and sample", () => {
+  it("rejects a source outside page and selection", () => {
     expect(ClipSchema.safeParse({ ...clip, source: "manual" }).success).toBe(false);
   });
 
