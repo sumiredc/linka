@@ -7,50 +7,39 @@ const STORE = '"$HOME/linka/linka.rl"';
 const EXPORT_PATTERN = EXPORT_FILE_NAME.replace(".cypher", "*.cypher");
 
 // $downloads はシェルが展開する。ダウンロード先を書き換えた人にも、実際に探した場所が出る
-const NO_EXPORT_IN_DOWNLOADS = `linka: no readable ${EXPORT_PATTERN} in $downloads`;
-export const NO_EXPORT_IN_LINKA = `linka: no readable ${EXPORT_FILE_NAME} in ~/linka`;
+export const NO_EXPORT_FOUND = `linka: no readable ${EXPORT_PATTERN} in $downloads or ~/linka. If your terminal can't read $downloads, move the file to ~/linka in Finder and run this again`;
 
 /**
- * find が $export_file を決める。読めるファイルでなければ message を出し、前の linka.rl を消す前に止める。
- * 読めないまま rm まで進むと、前の linka.rl だけが消えて何も読み込まれない。
+ * ~/Downloads と ~/linka の両方から、一番新しい書き出しを読む。
+ * ~/linka は、macOS がターミナルにダウンロードフォルダを読ませないときに、Finder で移してもらう先。
+ * 両方を比べるので、前に ~/linka に移した古いファイルが新しい書き出しより優先されない。
+ *
+ * Chrome は同じ名前があると「linka-export (1).cypher」で保存するので、名前ではなく一番新しいものを読む。
+ * glob を使わないのは、zsh では一致しない glob が「no matches found」で止まるため。
+ * command を付けて、利用者の ls の alias（-l・eza など）を通さない。
+ * grep -m 1 ではなく awk で最後まで読む。途中で閉じると、pipefail のシェルでは ls の SIGPIPE で失敗になる。
+ * ls はフォルダが無いか読めないと失敗するので、pipefail でも止まらないよう || true を付け、エラーは捨てる。
+ * awk は見つからなくても 0 で終わるので、見つかったかは [ -f ] で見る（名前が空なら、そのパスはディレクトリ）。
+ * 読めるファイルでなければ、前の linka.rl を消す前に止める。読めないまま rm まで進むと、前の linka.rl だけが消える。
  * `a || { …; false; } && b` は左から結びつくので、a が失敗したときだけ message を出して b 以降を流さない。
  * 前の linka.rl に読み込むと、そのあと消したページが残るので、消してから作る。
  * `query` を省くと文を実行せずヘルプを出して 0 で終わる。stdout は文ごとの所要時間なので捨てる
  */
-const buildStore = (find: string[], message: string) =>
-  [
-    ...find,
-    '  [ -f "$export_file" ] && [ -r "$export_file" ] ||',
-    `  { echo "${message}" >&2; false; } &&`,
-    '  echo "Loading $export_file" &&',
-    '  mkdir -p "$HOME/linka" &&',
-    `  rm -f ${STORE} &&`,
-    `  DO_NOT_TRACK=1 relate query -d ${STORE} < "$export_file" > /dev/null`,
-  ].join("\n");
-
-/**
- * Chrome は同じ名前があると「linka-export (1).cypher」で保存するので、名前ではなく一番新しいものを読む。
- * glob を使わないのは、zsh では一致しない glob が「no matches found」だけを出し、
- * macOS がターミナルにダウンロードフォルダを読ませていないことが分からないため。ls なら「Operation not permitted」と出る。
- * command を付けて、利用者の ls の alias（-l・eza など）を通さない。
- * grep -m 1 ではなく awk で最後まで読む。途中で閉じると、pipefail のシェルでは ls の SIGPIPE で失敗になる。
- * awk は見つからなくても 0 で終わるので、見つかったかは [ -f ] で見る（名前が空なら $export_file はディレクトリ）
- */
-export const BUILD_STORE_COMMAND = buildStore(
-  [
-    // ダウンロード先を変えている人が書き換えるのは 1 行目だけで済むようにする
-    'downloads="$HOME/Downloads" &&',
-    `  export_name=$(command ls -t "$downloads" | awk '/^${EXPORT_FILE_NAME.replace(".cypher", ".*\\.cypher")}$/ && !found { print; found = 1 }') &&`,
-    '  export_file="$downloads/$export_name" &&',
-  ],
-  NO_EXPORT_IN_DOWNLOADS,
-);
-
-/** ダウンロードフォルダの許可を広げたくない人向け。Finder で ~/linka に移したファイルを読む */
-export const BUILD_STORE_FROM_LINKA_COMMAND = buildStore(
-  [`export_file="$HOME/linka/${EXPORT_FILE_NAME}" &&`],
-  NO_EXPORT_IN_LINKA,
-);
+export const BUILD_STORE_COMMAND = [
+  // ダウンロード先を変えている人が書き換えるのは 1 行目だけで済むようにする
+  'downloads="$HOME/Downloads" &&',
+  `  newest='/^${EXPORT_FILE_NAME.replace(".cypher", ".*\\.cypher")}$/ && !found { print; found = 1 }' &&`,
+  '  in_downloads="$downloads/$(command ls -t "$downloads" 2>/dev/null | awk "$newest" || true)" &&',
+  '  in_linka="$HOME/linka/$(command ls -t "$HOME/linka" 2>/dev/null | awk "$newest" || true)" &&',
+  '  { [ -f "$in_downloads" ] && { [ ! -f "$in_linka" ] || [ ! "$in_linka" -nt "$in_downloads" ]; } &&',
+  '  export_file="$in_downloads" || export_file="$in_linka"; } &&',
+  '  [ -f "$export_file" ] && [ -r "$export_file" ] ||',
+  `  { echo "${NO_EXPORT_FOUND}" >&2; false; } &&`,
+  '  echo "Loading $export_file" &&',
+  '  mkdir -p "$HOME/linka" &&',
+  `  rm -f ${STORE} &&`,
+  `  DO_NOT_TRACK=1 relate query -d ${STORE} < "$export_file" > /dev/null`,
+].join("\n");
 
 /** エージェントの MCP が失敗したときに、まず linka.rl があるかを確かめる */
 export const CHECK_STORE_COMMAND = "ls ~/linka/linka.rl";

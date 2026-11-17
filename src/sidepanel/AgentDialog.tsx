@@ -5,7 +5,6 @@ import styles from "./AgentDialog.module.css";
 import {
   AGENT_PROMPT,
   BUILD_STORE_COMMAND,
-  BUILD_STORE_FROM_LINKA_COMMAND,
   CHECK_STORE_COMMAND,
   CLAUDE_CODE_COMMAND,
   CODEX_COMMAND,
@@ -243,23 +242,15 @@ export function AgentDialog({
         <li>
           <span>
             Make a Relate file. This loads the newest <code>linka-export*.cypher</code> in{" "}
-            <code>~/Downloads</code>, so a re-export saved as <code>linka-export (1).cypher</code>{" "}
-            is used too. If your browser saves downloads elsewhere, change the path on the first
-            line.
+            <code>~/Downloads</code> or <code>~/linka</code>, so a re-export saved as{" "}
+            <code>linka-export (1).cypher</code> is used too. If your browser saves downloads
+            elsewhere, change the path on the first line.
           </span>
           <Command text={BUILD_STORE_COMMAND} label="the store command" />
           <p className={styles.note}>
-            If it says <code>Operation not permitted</code>, your terminal can't read{" "}
-            <code>~/Downloads</code>. Either allow it in System Settings → Privacy &amp; Security →
-            Files and Folders → your terminal app → Downloads Folder (or Full Disk Access) and
-            restart the terminal, or in Finder move the file to <code>~/linka</code> (create the
-            folder if needed), rename it to <code>{EXPORT_FILE_NAME}</code> if it is, say,{" "}
-            <code>linka-export (1).cypher</code>, and run:
+            If it finds no file, your terminal may not be allowed to read <code>~/Downloads</code>.
+            Move the file to <code>~/linka</code> in Finder and run the same command again.
           </p>
-          <Command
-            text={BUILD_STORE_FROM_LINKA_COMMAND}
-            label="the command for a file in ~/linka"
-          />
         </li>
         <li>
           <span>

@@ -112,33 +112,24 @@ Before you start:
 
 Then, in a terminal:
 
-1. **Make a Relate file.** This loads the newest `linka-export*.cypher` in `~/Downloads`, so a re-export saved as `linka-export (1).cypher` is used too. If your browser saves downloads elsewhere, change the path on the first line.
+1. **Make a Relate file.** This loads the newest `linka-export*.cypher` in `~/Downloads` or `~/linka`, so a re-export saved as `linka-export (1).cypher` is used too. If your browser saves downloads elsewhere, change the path on the first line.
 
    ```sh
    downloads="$HOME/Downloads" &&
-     export_name=$(command ls -t "$downloads" | awk '/^linka-export.*\.cypher$/ && !found { print; found = 1 }') &&
-     export_file="$downloads/$export_name" &&
+     newest='/^linka-export.*\.cypher$/ && !found { print; found = 1 }' &&
+     in_downloads="$downloads/$(command ls -t "$downloads" 2>/dev/null | awk "$newest" || true)" &&
+     in_linka="$HOME/linka/$(command ls -t "$HOME/linka" 2>/dev/null | awk "$newest" || true)" &&
+     { [ -f "$in_downloads" ] && { [ ! -f "$in_linka" ] || [ ! "$in_linka" -nt "$in_downloads" ]; } &&
+     export_file="$in_downloads" || export_file="$in_linka"; } &&
      [ -f "$export_file" ] && [ -r "$export_file" ] ||
-     { echo "linka: no readable linka-export*.cypher in $downloads" >&2; false; } &&
+     { echo "linka: no readable linka-export*.cypher in $downloads or ~/linka. If your terminal can't read $downloads, move the file to ~/linka in Finder and run this again" >&2; false; } &&
      echo "Loading $export_file" &&
      mkdir -p "$HOME/linka" &&
      rm -f "$HOME/linka/linka.rl" &&
      DO_NOT_TRACK=1 relate query -d "$HOME/linka/linka.rl" < "$export_file" > /dev/null
    ```
 
-   If it says `Operation not permitted`, your terminal can't read `~/Downloads`. Either allow it in System Settings → Privacy & Security → Files and Folders → your terminal app → Downloads Folder (or Full Disk Access) and restart the terminal, or in Finder move the file to `~/linka` (create the folder if needed), rename it to `linka-export.cypher` if it is, say, `linka-export (1).cypher`, and run:
-
-   ```sh
-   export_file="$HOME/linka/linka-export.cypher" &&
-     [ -f "$export_file" ] && [ -r "$export_file" ] ||
-     { echo "linka: no readable linka-export.cypher in ~/linka" >&2; false; } &&
-     echo "Loading $export_file" &&
-     mkdir -p "$HOME/linka" &&
-     rm -f "$HOME/linka/linka.rl" &&
-     DO_NOT_TRACK=1 relate query -d "$HOME/linka/linka.rl" < "$export_file" > /dev/null
-   ```
-
-   Both commands delete the previous `linka.rl` only after they find a readable export, because loading into an old file would keep pages you have since removed. If loading fails, the CLI exits with a non-zero status (6 for syntax and type errors) and reports which statement failed. Statements before it stay in the file, so run the command again after fixing the cause; it starts from an empty file.
+   If it finds no file, your terminal may not be allowed to read `~/Downloads`. Move the file to `~/linka` in Finder and run the same command again.
 
 2. **Register it as a read-only MCP server.** Do this after step 1 succeeds; otherwise the server fails to start. `$HOME` is expanded by your shell, so the agent's configuration gets an absolute path.
 

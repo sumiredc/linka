@@ -11,11 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  BUILD_STORE_COMMAND,
-  BUILD_STORE_FROM_LINKA_COMMAND,
-  NO_EXPORT_IN_LINKA,
-} from "./agent-guide";
+import { BUILD_STORE_COMMAND } from "./agent-guide";
 
 // 利用者がターミナルに貼るのは sh・bash・zsh のどれか。手元に無いシェルは飛ばす
 const installed = (shells: string[]) =>
@@ -80,7 +76,8 @@ function run(shell: string, command: string, prelude = "") {
 }
 
 // 探した場所はシェルが展開した $downloads で出す（1 行目を書き換えた人にもそこが出る）
-const notFound = () => `linka: no readable linka-export*.cypher in ${join(home, "Downloads")}`;
+const notFound = () =>
+  `linka: no readable linka-export*.cypher in ${join(home, "Downloads")} or ~/linka`;
 
 describe.each(SHELLS)("in %s, the command that makes linka.rl from ~/Downloads", (shell) => {
   it("loads the newest linka-export*.cypher, because Chrome saves a re-export as linka-export (1).cypher", () => {
@@ -164,35 +161,60 @@ describe.each(PIPEFAIL_SHELLS)("in %s with pipefail", (shell) => {
   });
 });
 
-describe.each(SHELLS)("in %s, the command that makes linka.rl from ~/linka", (shell) => {
-  it("loads ~/linka/linka-export.cypher in place of the previous linka.rl", () => {
-    setUp();
-    write("linka/linka-export.cypher", "moved");
-    const { status, store } = run(shell, BUILD_STORE_FROM_LINKA_COMMAND);
-    expect(status).toBe(0);
-    expect(store).toBe("moved");
-  });
-
+describe.each(SHELLS)("in %s, the command reading a file moved to ~/linka", (shell) => {
   it.each<Case>([
-    ["was not moved there", () => {}],
-    ["is a directory", () => mkdirSync(join(home, "linka", "linka-export.cypher"))],
+    ["does not exist", () => {}],
+    ["has no export", () => mkdirSync(join(home, "Downloads"))],
     ...(isRoot
       ? []
       : ([
           [
-            "is unreadable",
+            "cannot be read",
             () => {
-              write("linka/linka-export.cypher", "secret");
-              chmodSync(join(home, "linka", "linka-export.cypher"), 0);
+              mkdirSync(join(home, "Downloads"));
+              chmodSync(join(home, "Downloads"), 0);
             },
           ],
         ] satisfies Case[])),
-  ])("says so and keeps the previous linka.rl when the file %s", (_, arrange) => {
+  ])("loads the newest export in ~/linka when ~/Downloads %s", (_, arrange) => {
     setUp();
     arrange();
-    const { status, stderr, store } = run(shell, BUILD_STORE_FROM_LINKA_COMMAND);
+    write("linka/linka-export.cypher", "older", 60);
+    write("linka/linka-export (1).cypher", "moved");
+    const { status, stderr, store } = run(shell, BUILD_STORE_COMMAND);
+    expect(status).toBe(0);
+    expect(stderr).toBe("");
+    expect(store).toBe("moved");
+  });
+
+  it.each([
+    ["~/Downloads", "newer in Downloads", 120, 0],
+    ["~/linka", "newer in linka", 0, 120],
+  ])("loads the export in %s when it is the newer one", (_, expected, linkaAge, downloadsAge) => {
+    setUp();
+    mkdirSync(join(home, "Downloads"));
+    write("linka/linka-export.cypher", "newer in linka", linkaAge);
+    write("Downloads/linka-export.cypher", "newer in Downloads", downloadsAge);
+    const { status, store } = run(shell, BUILD_STORE_COMMAND);
+    expect(status).toBe(0);
+    expect(store).toBe(expected);
+  });
+
+  it("tells to move the file to ~/linka when neither folder has an export", () => {
+    setUp();
+    const { status, stderr, store } = run(shell, BUILD_STORE_COMMAND);
     expect(status).not.toBe(0);
-    expect(stderr).toContain(NO_EXPORT_IN_LINKA);
+    expect(stderr).toContain("move the file to ~/linka in Finder and run this again");
     expect(store).toBe("previous store");
+  });
+});
+
+describe.each(PIPEFAIL_SHELLS)("in %s with pipefail, when ~/Downloads does not exist", (shell) => {
+  it("still loads the export in ~/linka", () => {
+    setUp();
+    write("linka/linka-export.cypher", "moved");
+    const { status, store } = run(shell, BUILD_STORE_COMMAND, "set -o pipefail\n");
+    expect(status).toBe(0);
+    expect(store).toBe("moved");
   });
 });

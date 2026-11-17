@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   BUILD_STORE_COMMAND,
-  BUILD_STORE_FROM_LINKA_COMMAND,
   CLAUDE_CODE_COMMAND,
   CODEX_COMMAND,
   DIRECT_QUERY_COMMAND,
@@ -10,11 +9,8 @@ import {
 // PRD UC4 の手順の決まり。コマンドそのものは Relate CLI 1.0.1・Claude Code・Codex で手で確かめる
 
 // 見つからないときと最新のものを選ぶことは、本物のシェルで流して確かめる（agent-guide.shell.test.ts）
-describe.each([
-  ["~/Downloads", BUILD_STORE_COMMAND],
-  ["~/linka", BUILD_STORE_FROM_LINKA_COMMAND],
-])("the command that makes linka.rl from %s", (_, command) => {
-  const lines = command.split("\n");
+describe("the command that makes linka.rl", () => {
+  const lines = BUILD_STORE_COMMAND.split("\n");
 
   it("loads the export with relate query, because relate -d without query only prints help", () => {
     expect(lines.at(-1)).toMatch(/relate query -d "\$HOME\/linka\/linka\.rl" < "\$export_file"/);
@@ -29,10 +25,6 @@ describe.each([
   it("does not run the rest once a line fails", () => {
     for (const line of lines.slice(0, -1)) expect(line).toMatch(/(&&|\|\|)$/);
   });
-});
-
-it("reads the file moved to ~/linka by its plain name", () => {
-  expect(BUILD_STORE_FROM_LINKA_COMMAND).toContain('export_file="$HOME/linka/linka-export.cypher"');
 });
 
 describe("registering the MCP server", () => {
