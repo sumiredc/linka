@@ -248,7 +248,7 @@ relate telemetry status
 ## Limitations
 
 - Extraction is an estimate by a small on-device model and can be wrong. There is no editor for the graph.
-- Suggested connections between pages can be wrong too. On 21 labeled pairs from the demo graph, Gemini Nano agreed on 13 and called about half of the unrelated pairs connected (measured on `dev.html` → **UC2 judge accuracy**).
+- Suggested connections between pages can be wrong too. On 21 labeled pairs from the demo graph, Gemini Nano agreed on 13 and called about half of the unrelated pairs connected (measured on 2026-11-16 with a development page that has since been removed).
 - Clipping and questions need Gemini Nano; there is no fallback to a cloud model.
 - No sync between devices or with Neo4j / Aura; export is the way out.
 - Desktop Chrome 138+ only.
@@ -260,15 +260,10 @@ npm test            # Vitest, including tests against a real in-memory Relate
 npm run typecheck   # tsc
 npm run lint        # Biome (CI runs `npx biome ci .`)
 npm run build       # dist/, the extension to load or ship
-npm run build:dev   # dist/ with the development page dev.html
-npm run dev         # like build:dev, and rebuild on change; reload the extension on chrome://extensions
+npm run dev         # rebuild dist/ on change; reload the extension on chrome://extensions
 ```
 
 The source is under `src/`, one folder per place it runs: `background/` (service worker), `offscreen/` (the Relate database and Gemini Nano), `popup/`, `sidepanel/`, `content/` (reads the page) and `shared/`.
-
-### Manual checks on `dev.html`
-
-`dev.html` is only in development builds: run `npm run build:dev` or `npm run dev`, reload the extension, and open `chrome-extension://<extension-id>/dev.html` in a tab (it is not linked from the UI; labels are in Japanese). `npm run build` leaves it out, because its console can write to your graph. It has a Cypher console on the extension's real database (writes there change your graph), an extraction check and Gemini Nano checks.
 
 ### Offscreen document logs
 

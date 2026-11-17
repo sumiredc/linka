@@ -1,6 +1,6 @@
 // 質問（PRD UC3）を、用意した問い合わせの種類と対象に置き換えて Cypher にする。
 // Nano が正しい Cypher を書けたのは 10 問中 2 問だった（#10）ので、Nano には種類と対象を選ばせるだけにし、
-// Cypher は種類ごとのパラメータ付きの文に対象を入れて作る。各文は src/dev/questions.ts の答えの Cypher を元にした
+// Cypher は種類ごとのパラメータ付きの文に対象を入れて作る。各文は src/shared/test/questions.ts の答えの Cypher を元にした
 import { z } from "zod";
 import { normalizeConceptKey } from "./concept-key";
 import type { CypherStatement } from "./cypher";

@@ -1,5 +1,5 @@
-// 開発用。Nano に Cypher を書かせる検証（PRD §11 の 10 問）の質問と、グラフの形の説明。
-// `reference` は人が書いた答えの Cypher。Nano の結果が正しいかを判断する材料として並べて表示する
+// テスト用。Nano に Cypher を書かせた検証（PRD §11 の 10 問）の質問と、人が書いた答えの Cypher（`reference`）。
+// 質問の種類ごとの Cypher（graph-question.ts）は、この答えを元にした
 
 export interface Question {
   id: string;
@@ -115,41 +115,3 @@ export const QUESTIONS: readonly Question[] = [
  * プロンプトに入れるグラフの形。PRD §5 と seed/demo.cypher から書いた。
  * 概念名の一覧は入れない（入れる版は画面のチェックで足す）
  */
-export const GRAPH_SCHEMA_PROMPT = `You translate a user's question into exactly one read-only Cypher query for a Relate graph database (openCypher dialect). The graph is a personal knowledge graph built from web pages the user has read.
-
-Node labels and properties (all property values are strings):
-- (:Page {url, title, summary, clippedAt, source})  clippedAt is an ISO 8601 string; source is 'page' or 'selection'
-- (:Concept {key, name, category})  name is the display name such as 'WebAssembly' or 'Storage quota'; key is the lowercased name without spaces or hyphens such as 'storagequota'
-- (:Person {name})  an author of a page
-- (:Claim {id, statement, type, source})  statement is one sentence; type is one of 'benefit', 'concern', 'solution', 'fact'
-
-Relationship types:
-- (:Page)-[:AUTHORED_BY]->(:Person)
-- (:Page)-[:MENTIONS]->(:Concept)
-- (:Page)-[:ASSERTS]->(:Claim)
-- (:Claim)-[:ABOUT]->(:Concept)
-- (:Claim {type: 'solution'})-[:ADDRESSES]->(:Claim {type: 'concern'})  the solution and the concern come from different pages
-- (:Concept)-[:RELATED_TO]->(:Concept)  the direction has no meaning; match it without a direction
-
-Concept categories in use: architecture, sync, capability, principle, library, storage, platform, database, constraint, api, runtime, toolchain.
-
-Rules:
-- Only read: use MATCH, OPTIONAL MATCH, WHERE, WITH, UNWIND, RETURN, ORDER BY, LIMIT and functions such as count, collect, toLower. Never use CREATE, MERGE, SET, DELETE, REMOVE, FOREACH, LOAD CSV or CALL.
-- Match concept names and titles case-insensitively, for example WHERE toLower(c.name) = 'indexeddb' or WHERE toLower(p.title) CONTAINS 'storage'.
-- Return readable properties (title, url, name, statement, type) with aliases, not whole nodes.
-- Add LIMIT 50 unless the query returns counts.
-- Output only the query in the "cypher" field, without a trailing semicolon and without explanations.
-
-Example question: Which claims does the page about Web Locks make?
-Example query:
-MATCH (p:Page)-[:ASSERTS]->(cl:Claim)
-WHERE toLower(p.title) CONTAINS 'web locks'
-RETURN cl.type AS type, cl.statement AS statement
-LIMIT 50`;
-
-export const CYPHER_RESPONSE_SCHEMA = {
-  type: "object",
-  properties: { cypher: { type: "string" } },
-  required: ["cypher"],
-  additionalProperties: false,
-};

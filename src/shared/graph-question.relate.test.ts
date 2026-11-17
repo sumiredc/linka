@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import demoCypher from "../../seed/demo.cypher?raw";
-import { QUESTIONS } from "../dev/questions";
 import {
   buildQuery,
   CANDIDATE_QUERIES,
@@ -12,6 +11,7 @@ import {
   toConceptRefs,
   toPageRefs,
 } from "./graph-question";
+import { QUESTIONS } from "./test/questions";
 import { openMemoryDb, run, runScript } from "./test/relate-node";
 
 const db = openMemoryDb();

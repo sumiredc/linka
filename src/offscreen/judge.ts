@@ -32,7 +32,7 @@ export const JUDGE_INSTRUCTION_VARIANTS = {
 export type JudgeInstructionVariant = keyof typeof JUDGE_INSTRUCTION_VARIANTS;
 
 /**
- * 本番の判定で使う指示。dev.html の「UC2 judge accuracy」で版ごとの一致率を Chrome + Nano で測り、良い方に切り替える。
+ * 本番の判定で使う指示。版ごとの一致率を Chrome + Nano で測り、良い方を選んだ（結果は PRD UC2）。
  * 2026-11-16 の 2 回の測定（21 組）で、strict が一致 13/21（FP 6〜7・FN 1〜2）と最もよかったので strict を使う。
  * 問題と手立てを先に書かせる版も試したが、21 組すべてを true と答えた（一致 8/21）。それでも誤りが残る扱いは PRD UC2
  */
