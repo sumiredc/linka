@@ -105,65 +105,57 @@ Each sample's solutions connect to concerns already in the demo graph, so the po
 
 ## Use with your coding agent
 
-Before you start:
+Everything happens in the project folder you work on with your agent, so each project gets its own graph.
 
-- **Install the Relate CLI** (see [Relate CLI](#relate-cli)).
-- **Export the graph.** In the side panel, choose **… → Export**. Chrome saves `linka-export.cypher` to your downloads folder (`linka-export (1).cypher` and so on if the name is taken). Export is disabled while the graph is empty. **… → Use with your agent** shows the same steps as below, with copy buttons.
+Before you start, **install the Relate CLI** (see [Relate CLI](#relate-cli)). **… → Use with your agent** in the side panel shows the same steps as below, with copy buttons.
 
-Then, in a terminal:
+1. **Save the export in your project folder.** In the side panel, choose **… → Export**. Chrome asks where to save `linka-export.cypher`: choose your project folder, and replace the old file if there is one. Export is disabled while the graph is empty. If Chrome downloads the file instead of asking, move it into your project folder.
 
-1. **Make a Relate file.** This loads the newest `linka-export*.cypher` in `~/Downloads` or `~/linka`, so a re-export saved as `linka-export (1).cypher` is used too. If your browser saves downloads elsewhere, change the path on the first line.
+   To keep the export and `linka.rl` out of git, add them to your `.gitignore`.
+
+2. **Make a Relate file.** In a terminal, in your project folder, run:
 
    ```sh
-   downloads="$HOME/Downloads" &&
-     newest='/^linka-export.*\.cypher$/ && !found { print; found = 1 }' &&
-     in_downloads="$downloads/$(command ls -t "$downloads" 2>/dev/null | awk "$newest" || true)" &&
-     in_linka="$HOME/linka/$(command ls -t "$HOME/linka" 2>/dev/null | awk "$newest" || true)" &&
-     { [ -f "$in_downloads" ] && { [ ! -f "$in_linka" ] || [ ! "$in_linka" -nt "$in_downloads" ]; } &&
-     export_file="$in_downloads" || export_file="$in_linka"; } &&
-     [ -f "$export_file" ] && [ -r "$export_file" ] ||
-     { echo "linka: no readable linka-export*.cypher in $downloads or ~/linka. If your terminal can't read $downloads, move the file to ~/linka in Finder and run this again" >&2; false; } &&
-     echo "Loading $export_file" &&
-     mkdir -p "$HOME/linka" &&
-     rm -f "$HOME/linka/linka.rl" &&
-     DO_NOT_TRACK=1 relate query -d "$HOME/linka/linka.rl" < "$export_file" > /dev/null
+   DO_NOT_TRACK=1 relate query --jsonl -d linka.rl < linka-export.cypher
    ```
 
-   If it finds no file, your terminal may not be allowed to read `~/Downloads`. Move the file to `~/linka` in Finder and run the same command again.
+   Run it again after each export. The export starts by deleting everything in the store, so `linka.rl` ends up with exactly the exported graph, and pages you deleted in Linka do not remain. On a new file, Relate notes that statement 1 changed nothing; that is expected.
 
-2. **Register it as a read-only MCP server.** Do this after step 1 succeeds; otherwise the server fails to start. `$HOME` is expanded by your shell, so the agent's configuration gets an absolute path.
+3. **Register it as a read-only MCP server.** Do this after step 2 succeeds; otherwise the server fails to start. Run it in your project folder: `$PWD` is expanded by your shell, so the agent's configuration gets an absolute path and works even when you start the agent in a subfolder.
 
    Claude Code:
 
    ```sh
-   claude mcp add linka -e DO_NOT_TRACK=1 -- relate serve --database "$HOME/linka/linka.rl" --read-only --mcp stdio
+   claude mcp add linka -e DO_NOT_TRACK=1 -- relate serve --database "$PWD/linka.rl" --read-only --mcp stdio
    ```
 
-   Run it in your project directory (add `--scope user` to use it in every project). Check it with `claude mcp list`.
+   Registers linka for this project only (the default `local` scope). Check it with `claude mcp list`.
 
    Codex:
 
    ```sh
-   codex mcp add linka --env DO_NOT_TRACK=1 -- relate serve --database "$HOME/linka/linka.rl" --read-only --mcp stdio
+   codex mcp add linka --env DO_NOT_TRACK=1 -- relate serve --database "$PWD/linka.rl" --read-only --mcp stdio
    ```
 
-   Writes `[mcp_servers.linka]` to `~/.codex/config.toml`; running it again replaces it. Restart Codex and run `/mcp` to see linka.
+   Writes `[mcp_servers.linka]` to `~/.codex/config.toml`, so every project sees it; running it in another project switches linka to that project's file. Restart Codex and run `/mcp` to see linka.
 
-   If `/mcp` shows linka as failed, check that `ls ~/linka/linka.rl` lists the file. If not, run step 1.
+   If `/mcp` shows linka as failed, check that `ls linka.rl` in your project folder lists the file. If not, run step 2.
 
    With `--read-only`, the agent sees only `read_cypher` and `get_schema`, and the file is not modified. Without it, the agent also gets `write_cypher` and can change the graph.
 
-3. **Ask your agent.**
+4. **Ask your agent.**
 
    ```text
    Use the linka graph to suggest an implementation plan based on the concerns and solutions I researched.
    ```
 
-To check the file without an agent, run:
+To check the file without an agent, run this in your project folder:
 
 ```sh
-DO_NOT_TRACK=1 relate query --read-only -d "$HOME/linka/linka.rl" "MATCH (p:Page) RETURN p.title AS title"
+DO_NOT_TRACK=1 relate query --read-only -d linka.rl "MATCH (p:Page) RETURN p.title AS title"
 ```
+
+These commands are written for macOS and Linux shells; they were checked on macOS with Relate CLI 1.0.1.
 
 ## Where the data lives
 
@@ -174,7 +166,7 @@ DO_NOT_TRACK=1 relate query --read-only -d "$HOME/linka/linka.rl" "MATCH (p:Page
 | Demo data | `seed/demo.json` → `seed/demo.cypher` (generated with `npm run seed`), bundled into the extension |
 | Bundled store | `data/linka.rl`, built from `seed/demo.cypher` with `npm run store` |
 | Sample pages and their pre-extracted data | `public/samples/` |
-| Your export | `linka-export.cypher` in your downloads folder, and `~/linka/linka.rl` if you follow the steps above |
+| Your export | `linka-export.cypher` and `linka.rl` in the project folder you chose, if you follow the steps above |
 
 ## The bundled store: `data/linka.rl`
 

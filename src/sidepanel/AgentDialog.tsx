@@ -9,8 +9,9 @@ import {
   CLAUDE_CODE_COMMAND,
   CODEX_COMMAND,
   DIRECT_QUERY_COMMAND,
+  STORE_FILE_NAME,
 } from "./agent-guide";
-import { downloadText, type ExportOutcome, exportGraph } from "./export-graph";
+import { type ExportOutcome, exportGraph, pickSaveTarget } from "./export-graph";
 import panel from "./SidePanel.module.css";
 
 export type ExportState =
@@ -21,7 +22,7 @@ export type ExportState =
 export type AgentHandoff = {
   open: boolean;
   exported: ExportState;
-  /** グラフを書き出してダウンロードさせ、渡し方のダイアログを開く */
+  /** 保存先を選ばせてグラフを書き出し、渡し方のダイアログを開く。クリックから直接呼ぶ */
   exportNow(): void;
   /** 書き出さずに渡し方のダイアログを開く（メニューの Use with your agent） */
   showGuide(): void;
@@ -39,9 +40,10 @@ export function useAgentHandoff(): AgentHandoff {
     if (running.current) return;
     running.current = true;
     setExported({ kind: "running" });
-    void exportGraph({ readGraph: askDb, save: downloadText }).then((outcome) => {
+    void exportGraph({ readGraph: askDb, pickTarget: pickSaveTarget }).then((outcome) => {
       running.current = false;
-      setExported({ kind: "done", outcome });
+      // 保存を取り消したら、書き出す前の説明に戻す
+      setExported(outcome ? { kind: "done", outcome } : { kind: "idle" });
     });
   };
 
@@ -64,7 +66,12 @@ function Intro({ exported }: { exported: ExportState }) {
   const file = <code>{EXPORT_FILE_NAME}</code>;
   if (exported.kind === "running") return <p>Exporting the graph…</p>;
   if (exported.kind === "idle") {
-    return <p>Export the graph to {file}, then follow these steps in a terminal.</p>;
+    return (
+      <p>
+        Export the graph to {file} in your project folder, then follow these steps in a terminal
+        there.
+      </p>
+    );
   }
   const { outcome } = exported;
   if (!outcome.ok) {
@@ -75,11 +82,19 @@ function Intro({ exported }: { exported: ExportState }) {
     );
   }
   const { nodes, relationships } = outcome.counts;
+  const counts = `${plural(nodes.Page, "page")}, ${plural(nodes.Concept, "concept")}, ${plural(nodes.Claim, "claim")}, ${plural(relationships, "relationship")}`;
+  if (outcome.savedTo === "download") {
+    return (
+      <p>
+        Downloaded {file} ({counts}). Move it into your project folder, then follow these steps in a
+        terminal there.
+      </p>
+    );
+  }
   return (
     <p>
-      Downloaded {file} ({plural(nodes.Page, "page")}, {plural(nodes.Concept, "concept")},{" "}
-      {plural(nodes.Claim, "claim")}, {plural(relationships, "relationship")}). Turn it into a
-      Relate file, then let your agent query it over MCP.
+      Saved {file} ({counts}). In a terminal in the folder you saved it to, turn it into a Relate
+      file, then let your agent query it over MCP.
     </p>
   );
 }
@@ -190,8 +205,7 @@ function AgentTabs() {
       >
         <Command text={CLAUDE_CODE_COMMAND} label="the Claude Code command" />
         <p className={styles.note}>
-          Run it in your project directory (add <code>--scope user</code> to use it in every
-          project). Check it with <code>claude mcp list</code>.
+          Registers linka for this project only. Check it with <code>claude mcp list</code>.
         </p>
       </div>
       <div
@@ -202,8 +216,9 @@ function AgentTabs() {
       >
         <Command text={CODEX_COMMAND} label="the Codex command" />
         <p className={styles.note}>
-          Writes <code>[mcp_servers.linka]</code> to <code>~/.codex/config.toml</code>; running it
-          again replaces it. Restart Codex and run <code>/mcp</code> to see linka.
+          Writes <code>[mcp_servers.linka]</code> to <code>~/.codex/config.toml</code>, so every
+          project sees it; running it in another project switches linka to that project. Restart
+          Codex and run <code>/mcp</code> to see linka.
         </p>
       </div>
     </>
@@ -227,7 +242,7 @@ export function AgentDialog({
     if (!open && element.open) element.close();
   }, [open]);
 
-  const downloaded = exported.kind === "done" && exported.outcome.ok;
+  const saved = exported.kind === "done" && exported.outcome.ok;
 
   return (
     <dialog
@@ -241,26 +256,32 @@ export function AgentDialog({
       <ol className={styles.steps}>
         <li>
           <span>
-            Make a Relate file. This loads the newest <code>linka-export*.cypher</code> in{" "}
-            <code>~/Downloads</code> or <code>~/linka</code>, so a re-export saved as{" "}
-            <code>linka-export (1).cypher</code> is used too. If your browser saves downloads
-            elsewhere, change the path on the first line.
+            Save the export in your project folder. <strong>Export</strong> asks where to save{" "}
+            <code>{EXPORT_FILE_NAME}</code>: choose the folder you open your agent in, and replace
+            the old file if there is one.
           </span>
-          <Command text={BUILD_STORE_COMMAND} label="the store command" />
           <p className={styles.note}>
-            If it finds no file, your terminal may not be allowed to read <code>~/Downloads</code>.
-            Move the file to <code>~/linka</code> in Finder and run the same command again.
+            To keep the export and <code>{STORE_FILE_NAME}</code> out of git, add them to{" "}
+            <code>.gitignore</code>.
           </p>
         </li>
         <li>
           <span>
-            Register it as a read-only MCP server. Do this after step 1 succeeds; otherwise the
+            Make a Relate file. Run this again after each export; it replaces what{" "}
+            <code>{STORE_FILE_NAME}</code> holds.
+          </span>
+          <Command text={BUILD_STORE_COMMAND} label="the store command" />
+        </li>
+        <li>
+          <span>
+            Register it as a read-only MCP server. Do this after step 2 succeeds; otherwise the
             server fails to start.
           </span>
           <AgentTabs />
           <p className={styles.note}>
             If <code>/mcp</code> shows linka as failed, check that{" "}
-            <code>{CHECK_STORE_COMMAND}</code> lists the file. If not, run step 1.
+            <code>{CHECK_STORE_COMMAND}</code> in your project folder lists the file. If not, run
+            step 2.
           </p>
         </li>
         <li>
@@ -272,7 +293,7 @@ export function AgentDialog({
         To check the file without an agent, run <code>{DIRECT_QUERY_COMMAND}</code>
       </p>
       <div className={panel.dialogActions}>
-        {!downloaded && (
+        {!saved && (
           <button
             type="button"
             className={panel.buttonQuiet}

@@ -1,29 +1,39 @@
 import { describe, expect, it } from "vitest";
+import { EXPORT_FILE_NAME } from "../shared/graph-export";
 import {
   BUILD_STORE_COMMAND,
+  CHECK_STORE_COMMAND,
   CLAUDE_CODE_COMMAND,
   CODEX_COMMAND,
   DIRECT_QUERY_COMMAND,
+  STORE_FILE_NAME,
 } from "./agent-guide";
 
-// PRD UC4 の手順の決まり。コマンドそのものは Relate CLI 1.0.1・Claude Code・Codex で手で確かめる
+// PRD UC4 の手順の決まり。コマンドそのものは Relate CLI 1.0.1・Claude Code・Codex で手で確かめる。
+// どのコマンドもプロジェクトのフォルダで流し、ダウンロードフォルダやホームの場所に頼らない
+const ALL = [
+  BUILD_STORE_COMMAND,
+  CHECK_STORE_COMMAND,
+  CLAUDE_CODE_COMMAND,
+  CODEX_COMMAND,
+  DIRECT_QUERY_COMMAND,
+];
 
-// 見つからないときと最新のものを選ぶことは、本物のシェルで流して確かめる（agent-guide.shell.test.ts）
+describe("the commands", () => {
+  it.each(ALL)("work in the project folder, not in a fixed place: %s", (command) => {
+    expect(command).not.toMatch(/\$HOME|~\/|Downloads/);
+  });
+});
+
 describe("the command that makes linka.rl", () => {
-  const lines = BUILD_STORE_COMMAND.split("\n");
-
-  it("loads the export with relate query, because relate -d without query only prints help", () => {
-    expect(lines.at(-1)).toMatch(/relate query -d "\$HOME\/linka\/linka\.rl" < "\$export_file"/);
+  it("loads the export from the project folder with relate query, because relate -d without query only prints help", () => {
+    expect(BUILD_STORE_COMMAND).toMatch(
+      new RegExp(`relate query .*-d ${STORE_FILE_NAME} < ${EXPORT_FILE_NAME.replace(".", "\\.")}$`),
+    );
   });
 
-  it("deletes the previous linka.rl before loading, so pages deleted since the last export do not remain", () => {
-    const remove = lines.indexOf('  rm -f "$HOME/linka/linka.rl" &&');
-    expect(remove).toBeGreaterThanOrEqual(0);
-    expect(remove).toBeLessThan(lines.length - 1);
-  });
-
-  it("does not run the rest once a line fails", () => {
-    for (const line of lines.slice(0, -1)) expect(line).toMatch(/(&&|\|\|)$/);
+  it("does not delete linka.rl first, because the export replaces what it holds", () => {
+    expect(BUILD_STORE_COMMAND).not.toContain("rm ");
   });
 });
 
@@ -32,16 +42,19 @@ describe("registering the MCP server", () => {
     ["Claude Code", CLAUDE_CODE_COMMAND],
     ["Codex", CODEX_COMMAND],
   ])(
-    "%s serves linka.rl read-only over stdio, by absolute path, without telemetry",
+    "%s serves the project's linka.rl read-only over stdio, by absolute path, without telemetry",
     (_, command) => {
+      // 相対パスだと、サブフォルダでエージェントを起動したときに見つからない
       expect(command).toContain(
-        '-- relate serve --database "$HOME/linka/linka.rl" --read-only --mcp stdio',
+        `-- relate serve --database "$PWD/${STORE_FILE_NAME}" --read-only --mcp stdio`,
       );
       expect(command).toMatch(/(-e|--env) DO_NOT_TRACK=1 /);
-      // ~ はエージェントの設定ファイルの中では展開されない
-      expect(command).not.toContain("~/linka");
     },
   );
+
+  it("registers Claude Code for this project only, with the default scope", () => {
+    expect(CLAUDE_CODE_COMMAND).not.toContain("--scope");
+  });
 
   it("registers Codex with codex mcp add, which replaces linka instead of appending a duplicate", () => {
     expect(CODEX_COMMAND).toMatch(/^codex mcp add linka /);
@@ -51,6 +64,6 @@ describe("registering the MCP server", () => {
 
 describe("querying linka.rl directly", () => {
   it("opens it read-only, because a plain query rewrites the file", () => {
-    expect(DIRECT_QUERY_COMMAND).toContain("relate query --read-only -d");
+    expect(DIRECT_QUERY_COMMAND).toContain(`relate query --read-only -d ${STORE_FILE_NAME}`);
   });
 });
