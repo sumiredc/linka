@@ -212,7 +212,7 @@ flowchart LR
 - 例外フロー：
   - グラフが空：Export を押せないようにする
   - 保存先を選ぶダイアログを取り消した：何も保存せず、説明は書き出す前の状態に戻る
-  - 書き出したファイルの読み込みで失敗する：CLI は 0 以外（文法・型のエラーは 6）で終わり、何番目の文で失敗したかを出す。それより前の文は確定して残るが、書き出しの先頭で中身を消すので、直した書き出しをもう一度流せばよい。README に手順と、確認済みの Relate のバージョンを書いておく
+  - 書き出したファイルの読み込みで失敗する：CLI は 0 以外（文法・型のエラーは 6）で終わり、何番目の文で失敗したかを出す。それより前の文は確定して残るが、書き出しの先頭で中身を消すので、直した書き出しをもう一度流せばよい。手順と確認済みの Relate のバージョンは `docs/agent-handoff.md` と `docs/relate-cli.md` に書く（README からリンクする）
 - 事後条件：
   - `linka.rl` を CLI で問い合わせると、サイドパネルと同じ件数の Page・Concept・Claim・関係が返る
   - 書き出しによってサイドパネル側のグラフは変わっていない
@@ -314,7 +314,7 @@ flowchart LR
 | 永続化されたストア（Overview） | `data/linka.rl`（`seed/demo.cypher` から `npm run store` で生成し、コミットする）。同じ seed から作り直してもバイト列が一致しないので、seed を変えたときだけ作り直す。問い合わせは `--read-only` で開く（付けないと読むだけでもファイルが書き換わり、差分が出る） | 作成済み（seed を変えたら作り直す） |
 | Relate が実際に動いているコード（Overview） | 拡張機能本体 | 済 |
 | デモ（2 分以内、ログイン不要で見られる）（Rules §4、Overview） | YouTube 限定公開などで 1 分 30 秒〜2 分 | 済（1:43、https://youtu.be/ZYyIQFN0fSY ） |
-| 使った Relate の機能・サードパーティツール・AI ツールの申告（Rules §3・§4） | Relate（Wasm・OPFS・Cypher・CLI・MCP）、使用ライブラリ、Gemini Nano（実行時）、Claude Code と Gemini（開発時）を README と Devpost に書く | 済（README の Declarations、Devpost の How we built it） |
+| 使った Relate の機能・サードパーティツール・AI ツールの申告（Rules §3・§4） | Relate（Wasm・OPFS・Cypher・CLI・MCP）、使用ライブラリ、Gemini Nano（実行時）、Claude Code と Gemini（開発時）を `docs/declarations.md`（README からリンクする）と Devpost に書く | 済（README の Declarations、Devpost の How we built it） |
 | 2026-11-11 以降の新規作成（Rules §3） | 最初のコミットの日付で示す。流用したコードがあれば明記する | 遵守 |
 | ライセンス（Rules §3、推奨） | MIT | 済（`LICENSE`） |
 
