@@ -13,7 +13,7 @@ Linka does not send your data anywhere. Everything it reads, extracts and stores
 
 ## What Linka stores, and where
 
-- **Your graph:** for each page you clip, its URL, title, summary, authors, concepts and claims, extracted by Gemini Nano. Linka does not store the full page text.
+- **Your graph:** for each page you clip, its URL, title and the time you clipped it, and the summary, authors, concepts and claims that Gemini Nano extracts from it. Linka does not store the full page text.
 - The graph is stored in your Chrome profile, in the extension's private storage (the origin private file system). Removing the extension removes it. **… → Clear graph** in the side panel deletes it.
 - **Recovery bookkeeping:** while a clip is being written, Linka keeps a note of how to undo it in the extension's local storage, so that a failed write can be undone. It is cleared when the write finishes.
 
