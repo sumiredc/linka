@@ -1,12 +1,21 @@
 name: Release
 
-# vX.Y.Z のタグを push すると、ストアに上げる zip を作り、そのタグの Release に添付する
+# vX.Y.Z のタグを push すると、ストアに上げる zip を作り、そのタグの Release に添付する。
+# 既存のタグの zip を作り直すときは、タグを指定して手動で走らせる
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "zip を作るタグ（例: v0.1.0）"
+        required: true
 
 permissions:
   contents: write
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   release:
@@ -15,6 +24,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.TAG }}
       - uses: actions/setup-node@v7
         with:
           node-version: 26.13.1
@@ -24,18 +35,25 @@ jobs:
       # ストアは manifest の version で版を区別するので、タグだけ進んだ zip を出さない
       - name: Tag matches the version
         run: |
-          tag="${GITHUB_REF_NAME#v}"
+          version="${TAG#v}"
           manifest=$(node -p 'require("./public/manifest.json").version')
           pkg=$(node -p 'require("./package.json").version')
-          if [ "$tag" != "$manifest" ] || [ "$tag" != "$pkg" ]; then
-            echo "::error::tag $GITHUB_REF_NAME, manifest.json $manifest, package.json $pkg が一致しない"
+          if [ "$version" != "$manifest" ] || [ "$version" != "$pkg" ]; then
+            echo "::error::tag $TAG, manifest.json $manifest, package.json $pkg が一致しない"
             exit 1
           fi
       - name: Unit test
         run: npm test
       - name: Package
         run: npm run package
+      # Release を GitHub の画面から先に作ることもあるので、あれば zip の添付だけにする
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" "release/linka-${GITHUB_REF_NAME#v}.zip" --verify-tag --generate-notes
+        run: |
+          zip="release/linka-${TAG#v}.zip"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$zip" --clobber
+          else
+            gh release create "$TAG" "$zip" --verify-tag --generate-notes
+          fi

@@ -35,7 +35,15 @@ Pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`: it tests, runs `npm
    git push origin vX.Y.Z
    ```
 
-If the tag and the versions differ, the workflow fails and creates no release.
+   Creating the release on GitHub (**Releases → Draft a new release**, with a new tag) works too: the workflow attaches the zip to that release.
+
+If the tag and the versions differ, the workflow fails and attaches nothing.
+
+To rebuild the zip for an existing tag, run the workflow by hand:
+
+```sh
+gh workflow run release.yml -f tag=vX.Y.Z
+```
 
 ## Offscreen document logs
 
