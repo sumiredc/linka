@@ -1,0 +1,62 @@
+name: Deploy site
+
+# site/ を linka.sumire-sakamoto.co.jp に配る。ストアに登録した URL と main を食い違わせないため、
+# main に入ったら自動で配る。サブドメイン・TLS・.htaccess は sumire-sakamoto 側が持つ
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", ".github/workflows/deploy-site.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-site
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: rsync site/
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      SITE_URL: https://linka.sumire-sakamoto.co.jp
+    steps:
+      - uses: actions/checkout@v7
+      - name: Settings are present
+        run: |
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_PATH; do
+            if [ -z "$(printenv "$name")" ]; then echo "::error::Variable $name is not set"; exit 1; fi
+          done
+      - name: Install the deploy key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          if [ -z "$DEPLOY_SSH_KEY" ] || [ -z "$DEPLOY_KNOWN_HOSTS" ]; then
+            echo "::error::Secret DEPLOY_SSH_KEY and Variable DEPLOY_KNOWN_HOSTS are required"; exit 1
+          fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # ホスト鍵は Variables の値と照合する。StrictHostKeyChecking は緩めない
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+      # --delete は付けない。配信先には sumire-sakamoto 側が置く .htaccess がある
+      - name: Upload
+        run: >
+          rsync -rvz --checksum --chmod=D755,F644
+          -e "ssh -i ~/.ssh/deploy_key -p $DEPLOY_PORT -o IdentitiesOnly=yes"
+          site/ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
+      - name: Verify
+        run: |
+          for path in / /logo.svg /ogp.png /images/clip.jpg; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$SITE_URL$path")
+            echo "$code $path"
+            [ "$code" = 200 ] || exit 1
+          done

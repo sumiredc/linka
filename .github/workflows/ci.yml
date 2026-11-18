@@ -1,6 +1,6 @@
 name: CI
 
-# 確かめるのはコードとその設定だけなので、文書・画像・同梱ストアだけの変更では走らせない。
+# 確かめるのはコードとその設定だけなので、文書・画像・同梱ストア・紹介ページだけの変更では走らせない。
 # 新しく足したコードの置き場所が漏れないよう、走らせる側ではなく走らせない側を並べる
 on:
   pull_request:
@@ -10,6 +10,7 @@ on:
       - "assets/**"
       - "data/**"
       - "LICENSE"
+      - "site/**"
   push:
     branches: [main]
     paths-ignore:
@@ -18,6 +19,7 @@ on:
       - "assets/**"
       - "data/**"
       - "LICENSE"
+      - "site/**"
 
 permissions:
   contents: read

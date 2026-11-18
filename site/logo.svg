@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Linka">
+  <title>Linka</title>
+  <rect width="128" height="128" rx="28" fill="#1c2638"/>
+  <rect x="18" y="18" width="56" height="70" rx="9" fill="#eef1f6"/>
+  <g stroke="#c3cad8" stroke-width="5" stroke-linecap="round">
+    <path d="M30 66H60"/><path d="M30 77H50"/>
+  </g>
+  <rect x="50" y="36" width="60" height="74" rx="9" fill="#1c2638"/>
+  <rect x="54" y="40" width="56" height="70" rx="9" fill="#eef1f6"/>
+  <g stroke="#c3cad8" stroke-width="5" stroke-linecap="round">
+    <path d="M66 62H96"/><path d="M66 73H86"/>
+  </g>
+  <path d="M38 40 86 92" stroke="#1c2638" stroke-width="13" stroke-linecap="round"/>
+  <path d="M38 40 86 92" stroke="#3445c9" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="38" cy="40" r="11" fill="#b02e66" stroke="#1c2638" stroke-width="4"/>
+  <circle cx="86" cy="92" r="11" fill="#157a6e" stroke="#1c2638" stroke-width="4"/>
+</svg>
