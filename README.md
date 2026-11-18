@@ -120,7 +120,7 @@ and ask Claude Code: *Use the linka graph to suggest an implementation plan base
 
 ## Privacy
 
-Page text, extraction results and the graph stay on your device. Extraction and questions run on Gemini Nano in Chrome; there is no Linka server and no call to an external API. The only network traffic Linka causes is Chrome downloading the Gemini Nano model.
+Page text, extraction results and the graph stay on your device. Extraction and questions run on Gemini Nano in Chrome; there is no Linka server and no call to an external API. The only network traffic Linka causes is Chrome downloading the Gemini Nano model. The full policy: [Privacy policy](docs/privacy.md).
 
 ## Limitations
 
@@ -135,6 +135,7 @@ Page text, extraction results and the graph stay on your device. Extraction and 
 - [Use Linka with your coding agent](docs/agent-handoff.md): every step, for Claude Code and Codex, on macOS, Linux and Windows
 - [Relate CLI](docs/relate-cli.md): installing it, and turning off its telemetry
 - [Development](docs/development.md): scripts, source layout, rebuilding `data/linka.rl`, logs
+- [Privacy policy](docs/privacy.md): what Linka reads and stores, and why it needs each permission
 - [Declarations](docs/declarations.md): Relate features, third-party libraries and AI tools used
 
 ## License
