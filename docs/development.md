@@ -1,6 +1,6 @@
 # Development
 
-This page is for changing Linka: the scripts, where the source is, how to rebuild the bundled store, how to release, and where to see logs.
+This page is for changing Linka: the scripts, where the source is, how to rebuild the bundled store, how to release, how the website is deployed, and where to see logs.
 
 ```sh
 npm test            # Vitest, including tests against a real in-memory Relate
@@ -44,6 +44,23 @@ To rebuild the zip for an existing tag, run the workflow by hand:
 ```sh
 gh workflow run release.yml -f tag=vX.Y.Z
 ```
+
+## Website
+
+`site/` is the page at https://linka.sumire-sakamoto.co.jp, the Official URL of the Chrome Web Store listing. It is hand-written HTML with no build step, and loads nothing from other origins. Open `site/index.html` in a browser to check it.
+
+When `site/**` changes on `main`, `.github/workflows/deploy-site.yml` copies `site/` to the server with rsync over SSH, then checks that the main URLs return 200. You can also run it by hand from the Actions tab. It does not delete files on the server, since the server keeps a `.htaccess` there.
+
+The subdomain, its TLS certificate and its `.htaccess` are set up outside this repository. The workflow needs these repository settings:
+
+| Name | Kind | Value |
+|---|---|---|
+| `DEPLOY_SSH_KEY` | Secret | Private key used only for this deploy |
+| `DEPLOY_HOST` | Variable | SSH host |
+| `DEPLOY_USER` | Variable | SSH user |
+| `DEPLOY_PORT` | Variable | SSH port (default 22) |
+| `DEPLOY_PATH` | Variable | Absolute path of the subdomain's document root |
+| `DEPLOY_KNOWN_HOSTS` | Variable | Output of `ssh-keyscan -p <port> -H <host>`, checked against the server's host key |
 
 ## Offscreen document logs
 

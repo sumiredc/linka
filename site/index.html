@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Linka: your research, as a graph, for your coding agent</title>
+<meta name="description" content="Linka builds a knowledge graph from the pages you read, right in Chrome. Ask it questions, then hand it to your coding agent over MCP. Everything runs on your device.">
+<link rel="icon" href="favicon.png">
+<meta property="og:title" content="Linka">
+<meta property="og:description" content="Your research, as a graph, for your coding agent. A Chrome extension that runs on your device.">
+<meta property="og:image" content="https://linka.sumire-sakamoto.co.jp/ogp.png">
+<meta property="og:url" content="https://linka.sumire-sakamoto.co.jp/">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+:root {
+  --ink: #1c2638;
+  --muted: #566079;
+  --line: #c3cad8;
+  --paper: #eef1f6;
+  --card: #ffffff;
+  --blue: #3445c9;
+  --concern: #b02e66;
+  --solution: #157a6e;
+}
+* { box-sizing: border-box; }
+.hero > *, .points > * { min-width: 0; }
+.steps li > * { min-width: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Helvetica Neue", -apple-system, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  font-size: 1.0625rem;
+  line-height: 1.65;
+}
+html[lang="en"] .ja, html[lang="ja"] .en { display: none; }
+html[lang="ja"] body { line-height: 1.8; }
+a { color: var(--blue); }
+a:focus-visible, button:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; border-radius: 4px; }
+img { max-width: 100%; height: auto; display: block; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+header.top { display: flex; align-items: center; justify-content: space-between; padding: 20px 0; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.25rem; color: var(--ink); text-decoration: none; }
+.brand img { width: 36px; height: 36px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.lang { margin: 0; min-width: 0; display: flex; gap: 2px; border: 1px solid var(--line); border-radius: 8px; padding: 2px; background: var(--card); }
+.lang button { font: inherit; font-size: 0.875rem; border: 0; background: none; color: var(--muted); padding: 4px 10px; border-radius: 6px; cursor: pointer; }
+.lang button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+
+.hero { display: grid; grid-template-columns: 1.1fr 1fr; gap: 40px; align-items: center; padding: 48px 0 72px; }
+.hero h1 { font-size: clamp(2.25rem, 5vw, 3.5rem); line-height: 1.12; letter-spacing: -0.02em; margin: 0 0 20px; }
+html[lang="ja"] .hero h1 { font-size: clamp(1.9rem, 4.2vw, 2.9rem); line-height: 1.3; letter-spacing: 0; }
+.hero p { font-size: 1.1875rem; color: var(--muted); margin: 0 0 28px; max-width: 34em; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.button { display: inline-block; padding: 12px 20px; border-radius: 10px; font-weight: 700; text-decoration: none; border: 2px solid var(--ink); }
+.button.primary { background: var(--ink); color: #fff; }
+.button.secondary { color: var(--ink); }
+.hero svg { width: 100%; height: auto; }
+
+section { padding: 56px 0; }
+h2 { font-size: clamp(1.6rem, 3vw, 2.1rem); line-height: 1.25; margin: 0 0 16px; letter-spacing: -0.01em; }
+.problem p { max-width: 40em; font-size: 1.1875rem; }
+
+.steps { list-style: none; margin: 32px 0 0; padding: 0; counter-reset: step; }
+.steps li { display: grid; grid-template-columns: 1fr 1.3fr; gap: 40px; align-items: center; padding: 32px 0; border-top: 1px solid var(--line); counter-increment: step; }
+.steps li:nth-child(even) { grid-template-columns: 1.3fr 1fr; }
+.steps li:nth-child(even) .text { order: 2; }
+.steps h3 { font-size: 1.375rem; margin: 0 0 8px; }
+.steps h3::before { content: counter(step); display: inline-grid; place-items: center; width: 1.6em; height: 1.6em; margin-right: 10px; border-radius: 50%; background: var(--ink); color: #fff; font-size: 0.85em; }
+.steps p { margin: 0; color: var(--muted); }
+.steps figure { margin: 0; }
+.steps img { border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.steps img.narrow { max-height: 460px; width: auto; margin: 0 auto; }
+
+.private { background: var(--ink); color: #e6e9f0; }
+.private h2 { color: #fff; }
+.points { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; margin-top: 24px; }
+.points h3 { color: #fff; font-size: 1.125rem; margin: 0 0 6px; }
+.points p { margin: 0; color: #b9c0cf; }
+
+.demo a { display: block; max-width: 720px; text-decoration: none; color: var(--ink); }
+.demo img { border-radius: 10px; border: 1px solid var(--line); }
+.demo span.caption { display: block; margin-top: 10px; font-weight: 700; }
+
+.requirements p { max-width: 42em; }
+
+footer { border-top: 1px solid var(--line); padding: 32px 0 48px; color: var(--muted); font-size: 0.9375rem; }
+footer nav { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 8px; }
+
+@media (max-width: 760px) {
+  .wrap { padding: 0 16px; }
+  .hero { grid-template-columns: 1fr; padding: 24px 0 48px; gap: 24px; }
+  .steps li, .steps li:nth-child(even) { grid-template-columns: 1fr; gap: 16px; }
+  .steps li:nth-child(even) .text { order: 0; }
+  .points { grid-template-columns: 1fr; gap: 20px; }
+  section { padding: 40px 0; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="./"><img src="logo.svg" alt="" width="36" height="36">Linka</a>
+    <fieldset class="lang">
+      <legend class="visually-hidden">Language</legend>
+      <button type="button" data-lang="en" aria-pressed="true">EN</button>
+      <button type="button" data-lang="ja" aria-pressed="false">日本語</button>
+    </fieldset>
+  </header>
+
+  <main>
+    <div class="hero">
+      <div>
+        <h1><span class="en">Your research, as a graph, for your coding agent.</span><span class="ja">調べたことをグラフにして、コーディングエージェントへ。</span></h1>
+        <p><span class="en">Linka builds a knowledge graph from the pages you read, right in Chrome. Ask it questions, then hand it to your coding agent, such as Claude Code or Codex, over MCP.</span><span class="ja">Linka は、Chrome で読んだページから知識グラフを作ります。グラフに質問でき、MCP で Claude Code や Codex などのコーディングエージェントに渡せます。</span></p>
+        <div class="actions">
+          <a class="button primary" href="https://chromewebstore.google.com/detail/linka/nmikjhnnhfhflfifapnncpkpldefdfpn"><span class="en">Add to Chrome</span><span class="ja">Chrome に追加</span></a>
+          <a class="button secondary" href="https://www.youtube.com/watch?v=ZYyIQFN0fSY"><span class="en">Watch the demo (1:43)</span><span class="ja">デモを見る（1:43）</span></a>
+        </div>
+      </div>
+      <svg viewBox="770 80 500 440" role="img" aria-label="A page links to a concern and a solution; the solution may address the concern."><line x1="830.0" y1="250.0" x2="1016.0" y2="172.5" stroke="#c3cad8" stroke-width="4"/><line x1="830.0" y1="250.0" x2="1031.5" y2="358.5" stroke="#c3cad8" stroke-width="4"/><line x1="1016.0" y1="172.5" x2="1202.0" y2="250.0" stroke="#c3cad8" stroke-width="4"/><line x1="1031.5" y1="358.5" x2="1202.0" y2="250.0" stroke="#c3cad8" stroke-width="4"/><line x1="1031.5" y1="358.5" x2="923.0" y2="436.0" stroke="#c3cad8" stroke-width="4"/><line x1="830.0" y1="250.0" x2="923.0" y2="436.0" stroke="#c3cad8" stroke-width="4"/><line x1="1031.5" y1="358.5" x2="1016.0" y2="172.5" stroke="#3445c9" stroke-width="5" stroke-dasharray="10 8"/><rect x="796.0" y="216.0" width="68" height="68" rx="11" fill="#1c2638"/><circle cx="1016.0" cy="172.5" r="34" fill="#b02e66"/><circle cx="1031.5" cy="358.5" r="34" fill="#157a6e"/><circle cx="1202.0" cy="250.0" r="25" fill="#ffffff" stroke="#566079" stroke-width="4"/><circle cx="923.0" cy="436.0" r="25" fill="#ffffff" stroke="#566079" stroke-width="4"/><text x="830.0" y="200.0" font-family="Helvetica Neue" font-size="24" fill="#566079" text-anchor="middle">Page</text><text x="1016.0" y="122.5" font-family="Helvetica Neue" font-size="24" fill="#566079" text-anchor="middle">Concern</text><text x="1079.5" y="366.5" font-family="Helvetica Neue" font-size="24" fill="#566079" text-anchor="start">Solution</text><text x="1202.0" y="210.0" font-family="Helvetica Neue" font-size="24" fill="#566079" text-anchor="middle">Concept</text><text x="923.0" y="494.0" font-family="Helvetica Neue" font-size="24" fill="#566079" text-anchor="middle">Concept</text><text x="1045.8" y="273.5" font-family="Helvetica Neue" font-size="20" font-weight="bold" fill="#3445c9">may address</text></svg>
+    </div>
+
+    <section class="problem">
+      <h2><span class="en">Which page answered which concern?</span><span class="ja">どのページが、どの懸念に答えていたか</span></h2>
+      <p><span class="en">Before you adopt a technique, you read about it: engineering blog posts, docs, issues and comparisons. One page raises a concern; another proposes a fix. Close the tabs, and those links are gone. Linka keeps them.</span><span class="ja">技術を採用する前に、ブログ・ドキュメント・Issue・比較記事を読み比べます。あるページが懸念を挙げ、別のページが解決策を示す。タブを閉じると、そのつながりは消えてしまいます。Linka はそれを残します。</span></p>
+
+      <ol class="steps">
+        <li>
+          <div class="text">
+            <h3><span class="en">Clip a page</span><span class="ja">ページをクリップする</span></h3>
+            <p><span class="en">Click the Linka icon. Gemini Nano, Chrome's on-device model, extracts the page's concepts, authors and claims: concerns, solutions, benefits and facts.</span><span class="ja">Linka のアイコンを押すと、Chrome の端末内モデル Gemini Nano が、ページの概念・著者・主張（懸念・解決策・利点・事実）を取り出します。</span></p>
+          </div>
+          <figure><img class="narrow" src="images/clip.jpg" width="745" height="890" alt="The Linka popup after clipping a page, listing the claims it extracted." loading="lazy"></figure>
+        </li>
+        <li>
+          <div class="text">
+            <h3><span class="en">See the connections</span><span class="ja">つながりを見る</span></h3>
+            <p><span class="en">Linka suggests where a solution on one page may address a concern on another, and links pages that share concepts.</span><span class="ja">あるページの解決策が、別のページの懸念に答えていそうな組を、Linka が候補として示します。同じ概念を扱うページどうしもつなぎます。</span></p>
+          </div>
+          <figure><img src="images/graph.jpg" width="1000" height="810" alt="The graph in Chrome's side panel: pages, concepts, concerns and solutions." loading="lazy"></figure>
+        </li>
+        <li>
+          <div class="text">
+            <h3><span class="en">Ask your graph</span><span class="ja">グラフに質問する</span></h3>
+            <p><span class="en">Ask in plain words, such as “Which solutions address concerns about SQLite?”. Linka shows the Cypher query it ran and highlights the answer in the graph.</span><span class="ja">「SQLite の懸念に答える解決策は？」のように、ふだんの言葉で質問できます。Linka は実行した Cypher クエリを見せ、答えをグラフの上で強調します。</span></p>
+          </div>
+          <figure><img src="images/ask.jpg" width="1600" height="818" alt="An answer in the side panel, with the Cypher query Linka ran." loading="lazy"></figure>
+        </li>
+        <li>
+          <div class="text">
+            <h3><span class="en">Hand it to your coding agent</span><span class="ja">コーディングエージェントに渡す</span></h3>
+            <p><span class="en">Export the graph and register it as a read-only MCP server with the Relate CLI. Your agent plans with the concerns and solutions you collected. <a href="https://github.com/sumiredc/linka/blob/main/docs/agent-handoff.md">See the steps</a>.</span><span class="ja">グラフを書き出し、Relate CLI で読み取り専用の MCP サーバーとして登録します。エージェントは、あなたが集めた懸念と解決策をもとに計画を立てます。<a href="https://github.com/sumiredc/linka/blob/main/docs/agent-handoff.md">手順（英語）</a></span></p>
+          </div>
+          <figure><img src="images/agent-plan.jpg" width="1600" height="766" alt="A coding agent's implementation plan that lists concerns with no solution yet." loading="lazy"></figure>
+        </li>
+      </ol>
+    </section>
+  </main>
+</div>
+
+<section class="private">
+  <div class="wrap">
+    <h2><span class="en">Private by design</span><span class="ja">データは端末の外に出ません</span></h2>
+    <div class="points">
+      <div>
+        <h3><span class="en">Runs on your device</span><span class="ja">端末の中で動く</span></h3>
+        <p><span class="en">Extraction and questions run on Gemini Nano in Chrome. Linka calls no external API.</span><span class="ja">抽出も質問も、Chrome の Gemini Nano で動きます。Linka は外部の API を呼びません。</span></p>
+      </div>
+      <div>
+        <h3><span class="en">Stored in your browser</span><span class="ja">ブラウザの中に保存する</span></h3>
+        <p><span class="en">The graph lives in Relate, an embedded graph database, in the extension's private storage.</span><span class="ja">グラフは、組み込みのグラフデータベース Relate に入れ、拡張機能専用の領域に保存します。</span></p>
+      </div>
+      <div>
+        <h3><span class="en">No server, no account</span><span class="ja">サーバーもアカウントも無い</span></h3>
+        <p><span class="en">There is no Linka server, no account and no analytics. Linka reads a page only when you clip it.</span><span class="ja">Linka のサーバー・アカウント・解析はありません。ページを読むのは、クリップしたときだけです。</span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="wrap">
+  <section class="demo">
+    <h2><span class="en">See it in action</span><span class="ja">動いているところを見る</span></h2>
+    <a href="https://www.youtube.com/watch?v=ZYyIQFN0fSY">
+      <img src="images/demo.jpg" width="960" height="540" alt="" loading="lazy">
+      <span class="caption"><span class="en">Watch the demo on YouTube (1:43)</span><span class="ja">YouTube でデモを見る（1:43）</span></span>
+    </a>
+  </section>
+
+  <section class="requirements">
+    <h2><span class="en">Requirements</span><span class="ja">動作環境</span></h2>
+    <p><span class="en">Desktop Chrome with Gemini Nano: Windows 10/11, macOS 13+, Linux or a Chromebook Plus, at least 22 GB of free disk space, and either a GPU with more than 4 GB of VRAM or 16 GB of RAM with 4 or more CPU cores. If the model is not on your device yet, Chrome downloads it the first time you open Linka. English pages work best.</span><span class="ja">Gemini Nano が使えるデスクトップ版の Chrome が要ります。Windows 10/11、macOS 13 以降、Linux、Chromebook Plus のいずれかで、空きディスクが 22 GB 以上あり、VRAM が 4 GB を超える GPU か、16 GB の RAM と 4 コア以上の CPU が必要です。モデルがまだ端末に無ければ、初めて Linka を開いたときに Chrome がダウンロードします。英語のページで最もよく動きます。</span></p>
+    <p><span class="en">Handing the graph to a coding agent needs the Relate CLI.</span><span class="ja">コーディングエージェントに渡すには、Relate CLI が要ります。</span></p>
+    <p><span class="en">Linka is open source under the MIT License.</span><span class="ja">Linka は MIT ライセンスのオープンソースです。</span> <a href="https://github.com/sumiredc/linka"><span class="en">Source on GitHub</span><span class="ja">GitHub のソース</span></a></p>
+  </section>
+
+  <footer>
+    <div>Linka — SUMIRE SAKAMOTO Inc. / 株式会社スミレサカモト</div>
+    <nav>
+      <a href="https://github.com/sumiredc/linka/blob/main/docs/privacy.md"><span class="en">Privacy policy</span><span class="ja">プライバシーポリシー（英語）</span></a>
+      <a href="https://github.com/sumiredc/linka/issues"><span class="en">Support</span><span class="ja">サポート</span></a>
+      <a href="https://github.com/sumiredc/linka">GitHub</a>
+    </nav>
+    <div>© 2026 SUMIRE SAKAMOTO Inc.</div>
+  </footer>
+</div>
+
+<script>
+(() => {
+  const KEY = "linka-lang";
+  const buttons = document.querySelectorAll(".lang button");
+  const apply = (lang) => {
+    document.documentElement.lang = lang;
+    for (const b of buttons) b.setAttribute("aria-pressed", String(b.dataset.lang === lang));
+  };
+  let stored = null;
+  try { stored = localStorage.getItem(KEY); } catch {}
+  const browserJa = (navigator.languages || [navigator.language]).some((l) => /^ja\b/i.test(l || ""));
+  apply(stored === "en" || stored === "ja" ? stored : browserJa ? "ja" : "en");
+  for (const b of buttons) {
+    b.addEventListener("click", () => {
+      apply(b.dataset.lang);
+      try { localStorage.setItem(KEY, b.dataset.lang); } catch {}
+    });
+  }
+})();
+</script>
+</body>
+</html>
