@@ -1,6 +1,6 @@
 # Development
 
-This page is for changing Linka: the scripts, where the source is, how to rebuild the bundled store, and where to see logs.
+This page is for changing Linka: the scripts, where the source is, how to rebuild the bundled store, how to release, and where to see logs.
 
 ```sh
 npm test            # Vitest, including tests against a real in-memory Relate
@@ -22,6 +22,20 @@ npm run store  # seed/demo.cypher -> data/linka.rl (needs Relate CLI 1.0.x on PA
 ```
 
 The rebuilt file is not byte-identical to the previous one even when the seed is unchanged, so rebuild it only when the seed changes.
+
+## Releasing
+
+Pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`: it tests, runs `npm run package`, and creates a GitHub Release for the tag with `linka-X.Y.Z.zip` attached. That zip is what goes to the Chrome Web Store.
+
+1. Set the same version in `public/manifest.json`, `package.json` and `package-lock.json` (`npm version X.Y.Z --no-git-tag-version` updates the last two), and merge it to `main`.
+2. Tag `main` and push the tag:
+
+   ```sh
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
+   ```
+
+If the tag and the versions differ, the workflow fails and creates no release.
 
 ## Offscreen document logs
 

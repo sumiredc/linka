@@ -1,0 +1,41 @@
+name: Release
+
+# vX.Y.Z のタグを push すると、ストアに上げる zip を作り、そのタグの Release に添付する
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: package and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26.13.1
+          cache: npm
+      - run: npm install -g npm@12.2.2
+      - run: npm ci
+      # ストアは manifest の version で版を区別するので、タグだけ進んだ zip を出さない
+      - name: Tag matches the version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          manifest=$(node -p 'require("./public/manifest.json").version')
+          pkg=$(node -p 'require("./package.json").version')
+          if [ "$tag" != "$manifest" ] || [ "$tag" != "$pkg" ]; then
+            echo "::error::tag $GITHUB_REF_NAME, manifest.json $manifest, package.json $pkg が一致しない"
+            exit 1
+          fi
+      - name: Unit test
+        run: npm test
+      - name: Package
+        run: npm run package
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "release/linka-${GITHUB_REF_NAME#v}.zip" --verify-tag --generate-notes
