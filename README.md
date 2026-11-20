@@ -12,6 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/sumiredc/linka/actions/workflows/ci.yml"><img src="https://github.com/sumiredc/linka/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+  <a href="https://chromewebstore.google.com/detail/linka/nmikjhnnhfhflfifapnncpkpldefdfpn"><img src="https://img.shields.io/chrome-web-store/v/nmikjhnnhfhflfifapnncpkpldefdfpn?label=Chrome%20Web%20Store" alt="Linka on the Chrome Web Store"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
 </p>
 
@@ -73,12 +74,15 @@ The first query lists 15 `Page`, 29 `Concept`, 9 `Person` and 48 `Claim` nodes. 
 
 ### Run the extension
 
-**Prerequisites**
+Linka needs desktop Chrome 138 or later, with Gemini Nano available. Per [Chrome's Prompt API docs](https://developer.chrome.com/docs/ai/prompt-api), Gemini Nano needs Windows 10/11, macOS 13+, Linux or a Chromebook Plus; at least 22 GB of free disk space; and either a GPU with more than 4 GB of VRAM or 16 GB of RAM with 4 or more CPU cores.
 
-- Desktop Chrome 138 or later, with Gemini Nano available. Per [Chrome's Prompt API docs](https://developer.chrome.com/docs/ai/prompt-api), Gemini Nano needs Windows 10/11, macOS 13+, Linux or a Chromebook Plus; at least 22 GB of free disk space; and either a GPU with more than 4 GB of VRAM or 16 GB of RAM with 4 or more CPU cores.
-- Node.js 26.13.1 and npm 12.2.2. The versions are pinned in `package.json`, and `npm ci` fails on others. [Volta](https://volta.sh/) picks them automatically.
+**Install from the Chrome Web Store**
 
-**Build and load**
+Open [Linka on the Chrome Web Store](https://chromewebstore.google.com/detail/linka/nmikjhnnhfhflfifapnncpkpldefdfpn), click **Add to Chrome**, and pin Linka to the toolbar (puzzle-piece icon → pin).
+
+**Or build from source**
+
+You need Node.js 26.13.1 and npm 12.2.2. The versions are pinned in `package.json`, and `npm ci` fails on others. [Volta](https://volta.sh/) picks them automatically.
 
 ```sh
 git clone https://github.com/sumiredc/linka.git
